@@ -1,7 +1,21 @@
-import app from "./app.js";
+import dotenv from "dotenv";
+dotenv.config({ quiet: true });
 
-const PORT = process.env.PORT || 3000;
+import { loadConfig } from "./config/secrets.js";
+const startServer = async () => {
+  await loadConfig();
+  const { default: app } = await import("./app.js");
+  const { checkConnection } = await import("./config/db.js");
+  const { getConfig } = await import("./config/env.config.js");
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+  const config = getConfig();
+
+  // DB Connection
+  await checkConnection();
+
+  app.listen(config.port || 3000, () => {
+    console.log(`Server running...`);
+  });
+};
+
+startServer();
