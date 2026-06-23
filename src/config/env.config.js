@@ -1,5 +1,8 @@
 const validateEnv = () => {
-  const requiredFields = ["DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME"];
+  const requiredFields = [
+    "DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME",
+    "COGNITO_USER_POOL_ID", "COGNITO_CLIENT_ID"
+  ];
   const missing = requiredFields.filter((field) => !process.env[field]);
 
   if (missing.length > 0) {
@@ -16,10 +19,15 @@ const validateEnv = () => {
       password: process.env.DB_PASSWORD,
       database: process.env.DB_NAME,
     },
+    cognito: {
+      userPoolId: process.env.COGNITO_USER_POOL_ID,
+      clientId: process.env.COGNITO_CLIENT_ID,
+    },
   };
 
   // deep freez obj to ensure immutability
   Object.freeze(config.db);
+  Object.freeze(config.cognito);
   return Object.freeze(config);
 };
 
