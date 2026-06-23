@@ -2,25 +2,32 @@ import pkg from "pg";
 const { Pool } = pkg;
 import { getConfig } from "./env.config.js";
 
-const config = getConfig();
+let pool;
 
-const pool = new Pool({
-  host: config.db.host,
-  port: config.db.port,
-  user: config.db.user,
-  password: config.db.password,
-  database: config.db.database,
-});
+// Lazy-init: pool created on first call, after loadConfig() has run
+const getPool = () => {
+  if (!pool) {
+    const config = getConfig();
+    pool = new Pool({
+      host: config.db.host,
+      port: config.db.port,
+      user: config.db.user,
+      password: config.db.password,
+      database: config.db.database,
+    });
 
-pool.on("error", (err) => {
-  console.error("Unexpected error on idle client", err);
-  process.exit(1);
-});
+    pool.on("error", (err) => {
+      console.error("Unexpected error on idle client", err);
+      process.exit(1);
+    });
+  }
+  return pool;
+};
 
 export const checkConnection = async () => {
   try {
     console.log("Connecting to database...");
-    const client = await pool.connect();
+    const client = await getPool().connect();
     console.log("Database connected successfully.");
     client.release();
   } catch (err) {
@@ -29,4 +36,5 @@ export const checkConnection = async () => {
   }
 };
 
-export default pool;
+export { getPool };
+export default getPool;
