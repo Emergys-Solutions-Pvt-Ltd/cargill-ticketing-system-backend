@@ -19,4 +19,14 @@ export const MESSAGES = {
     statusCode: 403,
     messageText: "Forbidden access !",
   },
+  validationError: {
+    statusFlag: false,
+    statusCode: 422,
+    messageText: "Validation failed. Please check the errors and try again.",
+  },
+  notFound: {
+    statusFlag: false,
+    statusCode: 404,
+    messageText: "Resource not found.",
+  },
 };
