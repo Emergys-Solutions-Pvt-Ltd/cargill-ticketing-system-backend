@@ -2,11 +2,12 @@ import { CognitoJwtVerifier } from "aws-jwt-verify";
 import { getConfig } from "../config/env.config.js";
 import { MESSAGES } from "../constants/message.constants.js";
 import logger from "../utils/logger.js";
+import asyncWrapper from "../utils/asyncWrapper.js";
 
 let verifier;
 
 // Lazy-init: verifier created on first request, after loadConfig() has run
-const getVerifier = () => {
+const getVerifier =  () => {
   if (!verifier) {
     const config = getConfig();
     // Verifier auto-caches JWKS and handles key rotation automatically
@@ -19,7 +20,7 @@ const getVerifier = () => {
   return verifier;
 }; 
 
-export const authenticateJwt = async (req, res, next) => {
+export const authenticateJwt = asyncWrapper( async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.sendResponse(MESSAGES.unauthorized);
@@ -33,4 +34,4 @@ export const authenticateJwt = async (req, res, next) => {
     logger.warn({ err: error }, "JWT verification failed");
     return res.sendResponse(MESSAGES.unauthorized);
   }
-};
+});

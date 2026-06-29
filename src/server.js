@@ -7,7 +7,6 @@ const startServer = async () => {
   const { default: app } = await import("./app.js");
   const { checkConnection } = await import("./config/db.js");
   const { getConfig } = await import("./config/env.config.js");
-  const { default: logger } = await import("./utils/logger.js");
 
   const config = getConfig();
 
@@ -15,7 +14,7 @@ const startServer = async () => {
   await checkConnection();
 
   app.listen(config.port || 3000, () => {
-    logger.info({ port: config.port || 3000 }, "Server running");
+    console.log(`Server running on port ${config.port || 3000}`);
   });
 };
 

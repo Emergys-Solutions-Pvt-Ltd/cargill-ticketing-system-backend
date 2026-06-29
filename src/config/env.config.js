@@ -10,7 +10,7 @@ const validateEnv = () => {
   }
 
   const config = {
-    port: process.env.PORT,
+    port: Number(process.env.PORT) || 3000,
     env: process.env.NODE_ENV,
     db: {
       host: process.env.DB_HOST,
