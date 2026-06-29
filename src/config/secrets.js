@@ -1,12 +1,13 @@
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
+import logger from "../utils/logger.js";
 
 export const loadConfig = async () => {
   if (process.env.NODE_ENV !== "production") {
-    console.log("Local env detected. Using local .env variables.");
+    logger.info("Local env detected. Using local .env variables.");
     return;
   }
 
-  console.log("Production env detected. Fetching secrets from AWS...");
+  logger.info("Production env detected. Fetching secrets from AWS...");
 
   const secretName = process.env.AWS_SECRET_NAME || "prod/cargil/api";
   const region = process.env.AWS_REGION || "us-east-1";
@@ -28,9 +29,9 @@ export const loadConfig = async () => {
       process.env[key] = secrets[key];
     }
 
-    console.log("AWS secrets loaded successfully.");
+    logger.info("AWS secrets loaded successfully.");
   } catch (error) {
-    console.error("Failed to load AWS secrets:", error.message);
+    logger.fatal({ err: error }, "Failed to load AWS secrets");
     process.exit(1); // Fail fast
   }
 };

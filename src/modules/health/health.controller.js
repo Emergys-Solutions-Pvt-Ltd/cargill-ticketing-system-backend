@@ -1,11 +1,8 @@
 import { checkHealth } from "./health.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
+import asyncWrapper from "../../utils/asyncWrapper.js";
 
-export const getHealth = (req, res, next) => {
-  try {
-    const healthInfo = checkHealth();
-    return res.sendResponse(MESSAGES.healthCheck, healthInfo);
-  } catch (error) {
-    next(error);
-  }
-};
+export const getHealth = asyncWrapper(async (req, res) => {
+  const healthInfo = checkHealth();
+  return res.sendResponse(MESSAGES.healthCheck, healthInfo);
+});

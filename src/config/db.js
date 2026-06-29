@@ -1,6 +1,7 @@
 import pkg from "pg";
 const { Pool } = pkg;
 import { getConfig } from "./env.config.js";
+import logger from "../utils/logger.js";
 
 let pool;
 
@@ -17,7 +18,7 @@ const getPool = () => {
     });
 
     pool.on("error", (err) => {
-      console.error("Unexpected error on idle client", err);
+      logger.fatal({ err }, "Unexpected error on idle DB client");
       process.exit(1);
     });
   }
@@ -26,12 +27,12 @@ const getPool = () => {
 
 export const checkConnection = async () => {
   try {
-    console.log("Connecting to database...");
+    logger.info("Connecting to database...");
     const client = await getPool().connect();
-    console.log("Database connected successfully.");
+    logger.info("Database connected successfully.");
     client.release();
   } catch (err) {
-    console.error("Failed to connect to the database:", err.message);
+    logger.fatal({ err }, "Failed to connect to database");
     process.exit(1);
   }
 };

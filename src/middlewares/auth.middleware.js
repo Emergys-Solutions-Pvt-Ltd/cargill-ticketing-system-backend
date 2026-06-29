@@ -1,6 +1,7 @@
 import { CognitoJwtVerifier } from "aws-jwt-verify";
 import { getConfig } from "../config/env.config.js";
 import { MESSAGES } from "../constants/message.constants.js";
+import logger from "../utils/logger.js";
 
 let verifier;
 
@@ -16,7 +17,7 @@ const getVerifier = () => {
     });
   }
   return verifier;
-};
+}; 
 
 export const authenticateJwt = async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -29,7 +30,7 @@ export const authenticateJwt = async (req, res, next) => {
     req.user = payload; // Attach user claims to request
     next();
   } catch (error) {
-    console.error("JWT Verification failed:", error.message);
+    logger.warn({ err: error }, "JWT verification failed");
     return res.sendResponse(MESSAGES.unauthorized);
   }
 };
