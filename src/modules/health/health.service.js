@@ -1,6 +1,6 @@
 import logger from "../../utils/logger.js";
 
-export const checkHealth = () => {
+export const checkHealthService = () => {
   logger.debug("Health service: executing health check...");
   return {
     status: "UP",

@@ -14,6 +14,7 @@ const getPool = () => {
       user: config.db.user,
       password: config.db.password,
       database: config.db.database,
+      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
     });
 
     pool.on("error", (err) => {

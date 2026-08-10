@@ -21,12 +21,13 @@ export const loadConfig = async () => {
       })
     );
 
-    const secrets = JSON.parse(response.SecretString);
+    const raw = response.SecretString ?? response.SecretBinary?.toString("utf-8");
+    const secrets = JSON.parse(raw);
 
-    // Inject AWS secrets into process.env
-    for (const key in secrets) {
-      process.env[key] = secrets[key];
-    }
+    // Inject AWS secrets into process.env — own keys only, String() ensures type safety
+    Object.entries(secrets).forEach(([key, value]) => {
+      process.env[key] = String(value);
+    });
 
     console.log("AWS secrets loaded successfully.");
   } catch (error) {

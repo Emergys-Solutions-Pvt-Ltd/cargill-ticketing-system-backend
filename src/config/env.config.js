@@ -1,7 +1,8 @@
 const validateEnv = () => {
   const requiredFields = [
     "DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME",
-    "COGNITO_USER_POOL_ID", "COGNITO_CLIENT_ID"
+    "COGNITO_USER_POOL_ID", "COGNITO_CLIENT_ID",
+    "RBAC_SCHEMA", "APP_TYPE",
   ];
   const missing = requiredFields.filter((field) => !process.env[field]);
 
@@ -23,6 +24,8 @@ const validateEnv = () => {
       userPoolId: process.env.COGNITO_USER_POOL_ID,
       clientId: process.env.COGNITO_CLIENT_ID,
     },
+    rbacSchema: process.env.RBAC_SCHEMA,  // "rbac" — matches env typo intentionally
+    appType: process.env.APP_TYPE,         // "HR" | "GENERIC"
   };
 
   // deep freez obj to ensure immutability
