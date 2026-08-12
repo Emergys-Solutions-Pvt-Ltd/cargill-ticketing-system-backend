@@ -2,34 +2,24 @@ import { getDepartmentStatsModel, getDepartmentUsersModel, addUserModel, toggleU
 import { getConfig } from "../../config/env.config.js";
 
 /**
- * Returns department list with stats.
- * Branches on APP_TYPE:
- *   - GENERIC: includes supervisorCount
- *   - HR:      excludes supervisorCount (no SUPERVISOR role in HR deployment)
+ * Returns department list with aggregated stats for the new schema.
+ * Per dept: superUserCount, userCount, groupCount.
+ * All 3 counts are always returned — no APP_TYPE branching needed.
  *
+ * @param {number|null} departmentId  Optional — filter to a single dept.
  * @returns {Promise<object[]>}
  */
 export const getDepartmentStatsService = async (departmentId = null) => {
-  const { appType } = getConfig();
   const rows = await getDepartmentStatsModel(departmentId);
 
-  return rows.map((dept) => {
-    const result = {
-      departmentId: dept.departmentId,
-      departmentCode: dept.departmentCode,
-      departmentName: dept.departmentName,
-      departmentAdminName: dept.departmentAdminName ?? null,
-      userCount: Number(dept.userCount),
-      queueCount: Number(dept.queueCount),
-    };
-
-    // Supervisor role only exists in GENERIC deployment
-    if (appType === "GENERIC") {
-      result.supervisorCount = Number(dept.supervisorCount);
-    }
-
-    return result;
-  });
+  return rows.map((dept) => ({
+    departmentId:   dept.departmentId,
+    departmentCode: dept.departmentCode,
+    departmentName: dept.departmentName,
+    superUserCount: Number(dept.superUserCount),
+    userCount:      Number(dept.userCount),
+    groupCount:     Number(dept.groupCount),
+  }));
 };
 
 /**

@@ -4,13 +4,13 @@ import asyncWrapper from "../../utils/asyncWrapper.js";
 
 /**
  * POST /api/v1/rbac/get-departments
- * Protected. Returns all active departments with:
- *   departmentName, departmentAdminName,
- *   supervisorCount (GENERIC only), userCount, queueCount
- * No body params required.
+ * Body: { departmentId? }  — omit for all departments.
+ * Returns active departments with:
+ *   departmentId, departmentCode, departmentName,
+ *   superUserCount, userCount, groupCount
  */
 export const getDepartments = asyncWrapper(async (req, res) => {
-  const {departmentId} = req.body?? {};
+  const { departmentId } = req.body ?? {};
   const departments = await getDepartmentStatsService(departmentId);
   return res.sendResponse(MESSAGES.departmentsFetched, departments);
 });

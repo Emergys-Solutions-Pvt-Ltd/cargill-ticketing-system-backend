@@ -3,60 +3,48 @@ import { getConfig } from "../../config/env.config.js";
 
 /**
  * Fetches all active departments with aggregated stats:
- *   - Department Admin full name
- *   - Supervisor count (GENERIC only — always queried, service filters by APP_TYPE)
- *   - User count (role = USER)
- *   - Total active queues in department
+ *   - superUserCount : active users with role SUPERUSER in this dept
+ *   - userCount      : active users with role USER in this dept
+ *   - groupCount     : active groups belonging to this dept
  *
- * Single query: role table joined once, role_code used directly in CASE WHEN.
- * Schema name from env — safe to interpolate.
+ * Single query — role table joined once, role_code used in CASE WHEN.
+ * Schema name is from env — safe to interpolate (not user input).
  *
+ * @param {number|null} departmentId  Optional — filters to a single dept.
  * @returns {Promise<object[]>}
  */
-export const getDepartmentStatsModel = async (departmentId) => {
+export const getDepartmentStatsModel = async (departmentId = null) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
 
   const query = `
     SELECT
-      d.department_id    AS "departmentId",
-      d.department_code  AS "departmentCode",
-      d.department_name  AS "departmentName",
+      d.department_id   AS "departmentId",
+      d.department_code AS "departmentCode",
+      d.department_name AS "departmentName",
 
-      -- Department Admin: subquery handles 0 or multiple admins safely
-      (
-        SELECT a.user_name
-        FROM ${rbacSchema}.app_user  a
-        INNER JOIN ${rbacSchema}.role ar ON ar.role_id = a.role_id
-        WHERE a.department_id = d.department_id
-          AND ar.role_code    = 'DEPARTMENT_ADMIN'
-          AND a.is_active     = TRUE
-        LIMIT 1
-      ) AS "departmentAdminName",
-
-      -- Supervisor count — role table joined once via r
+      -- Active SUPERUSERs in this department
       COUNT(DISTINCT CASE
-        WHEN r.role_code = 'SUPERVISOR' AND u.is_active = TRUE
+        WHEN r.role_code = 'SUPERUSER' AND u.is_active = TRUE
         THEN u.user_id
-      END) AS "supervisorCount",
+      END) AS "superUserCount",
 
-      -- User count — same join
+      -- Active USERs in this department
       COUNT(DISTINCT CASE
         WHEN r.role_code = 'USER' AND u.is_active = TRUE
         THEN u.user_id
       END) AS "userCount",
 
-      -- Total active queues in this department
-      COUNT(DISTINCT q.queue_id) AS "queueCount"
+      -- Active groups belonging to this department
+      COUNT(DISTINCT g.group_id) AS "groupCount"
 
     FROM ${rbacSchema}.department d
-    LEFT JOIN ${rbacSchema}.app_user u  ON u.department_id = d.department_id
-    LEFT JOIN ${rbacSchema}.role r      ON r.role_id       = u.role_id
-    LEFT JOIN ${rbacSchema}.queue q
-      ON q.department_id = d.department_id
-      AND q.is_active    = TRUE
-    WHERE d.is_active = TRUE
-    ${departmentId ? `AND d.department_id = $1` : ""}
+    LEFT JOIN ${rbacSchema}.app_user u ON u.department_id = d.department_id
+    LEFT JOIN ${rbacSchema}.role     r ON r.role_id       = u.role_id
+    LEFT JOIN ${rbacSchema}.groups   g
+      ON  g.department_id = d.department_id
+      AND g.is_active     = TRUE
+    ${departmentId ? `WHERE d.department_id = $1` : ""}
     GROUP BY d.department_id, d.department_code, d.department_name
     ORDER BY d.department_name
   `;
@@ -321,7 +309,7 @@ export const changeDepartmentAdminModel = async ({ oldAdminId, newAdminId, depar
     );
     const roleMap = Object.fromEntries(roleResult.rows.map((r) => [r.role_code, r.role_id]));
     const deptAdminRoleId = roleMap["DEPARTMENT_ADMIN"];
-    const userRoleId      = roleMap["USER"];
+    const userRoleId = roleMap["USER"];
 
     // 2. Validate new admin exists in this dept
     const newAdminCheck = await client.query(
