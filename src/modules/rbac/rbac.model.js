@@ -588,3 +588,59 @@ export const getDepartmentSupervisorsModel = async () => {
   const result = await pool.query(query);
   return result.rows;
 };
+
+/**
+ * Fetches paginated groups for the Groups overview table.
+ * 
+ * Per group:
+ *   groupId, groupName, groupDescription, departmentName,
+ *   queuesAssigned (COUNT DISTINCT via group_queue),
+ *   usersAssigned (COUNT DISTINCT via user_group),
+ *   totalCount (window fn — total rows before LIMIT).
+ *
+ * @param {{ limit: number, offset: number, departmentId?: number }} options
+ * @returns {Promise<object[]>}
+ */
+export const getGroupsModel = async ({ limit, offset, departmentId }) => {
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+
+  const query = `
+    WITH base AS (
+      SELECT
+        g.group_id                AS "groupId",
+        g.group_name              AS "groupName",
+        g.group_description       AS "groupDescription",
+        d.department_name         AS "departmentName",
+
+        -- Count of queues assigned to this group
+        COUNT(DISTINCT gq.queue_id) AS "queuesAssigned",
+
+        -- Count of users assigned to this group
+        COUNT(DISTINCT ug.user_id)  AS "usersAssigned"
+
+      FROM ${rbacSchema}.groups g
+      JOIN ${rbacSchema}.department d ON d.department_id = g.department_id
+      LEFT JOIN ${rbacSchema}.group_queue gq ON gq.group_id = g.group_id
+      LEFT JOIN ${rbacSchema}.user_group ug ON ug.group_id = g.group_id
+      WHERE g.is_active = TRUE
+      ${departmentId ? 'AND g.department_id = $3' : ''}
+      GROUP BY
+        g.group_id, g.group_name, g.group_description, d.department_name
+    )
+    SELECT 
+      b.*,
+      COUNT(*) OVER() AS "totalCount"
+    FROM base b
+    ORDER BY b."departmentName", b."groupName"
+    LIMIT $1 OFFSET $2
+  `;
+
+  const params = [limit, offset];
+  if (departmentId) {
+    params.push(departmentId);
+  }
+
+  const result = await pool.query(query, params);
+  return result.rows;
+};

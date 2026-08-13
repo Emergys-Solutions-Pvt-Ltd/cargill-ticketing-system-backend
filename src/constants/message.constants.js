@@ -119,4 +119,9 @@ export const MESSAGES = {
     statusCode: 200,
     messageText: "Department supervisors fetched successfully.",
   },
+  groupsFetched: {
+    statusFlag: true,
+    statusCode: 200,
+    messageText: "Groups fetched successfully.",
+  },
 };

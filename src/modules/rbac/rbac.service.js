@@ -1,4 +1,4 @@
-import { getDepartmentStatsModel, getDepartmentUsersModel, addUserModel, toggleUserStatusModel, changeDepartmentAdminModel, getQueuesModel, removeUserQueueModel, assignQueuesModel, getUsersOverviewModel, getDepartmentSupervisorsModel } from "./rbac.model.js";
+import { getDepartmentStatsModel, getDepartmentUsersModel, addUserModel, toggleUserStatusModel, changeDepartmentAdminModel, getQueuesModel, removeUserQueueModel, assignQueuesModel, getUsersOverviewModel, getDepartmentSupervisorsModel, getGroupsModel } from "./rbac.model.js";
 import { getConfig } from "../../config/env.config.js";
 
 /**
@@ -210,3 +210,30 @@ export const getDepartmentSupervisorsService = async () => {
 
   return Array.from(deptMap.values());
 };
+
+/**
+ * Returns paginated groups for the Groups overview table.
+ *
+ * @param {{ page?: number, pageSize?: number, departmentId?: number }} options
+ * @returns {Promise<{ total: number, page: number, pageSize: number, groups: object[] }>}
+ */
+export const getGroupsService = async ({ page = 1, pageSize = 10, departmentId } = {}) => {
+  const limit  = pageSize;
+  const offset = (page - 1) * pageSize;
+
+  const rows = await getGroupsModel({ limit, offset, departmentId });
+
+  const total = rows.length > 0 ? Number(rows[0].totalCount) : 0;
+
+  const groups = rows.map((g) => ({
+    groupId:          g.groupId,
+    groupName:        g.groupName,
+    groupDescription: g.groupDescription ?? null,
+    departmentName:   g.departmentName,
+    queuesAssigned:   Number(g.queuesAssigned),
+    usersAssigned:    Number(g.usersAssigned)
+  }));
+
+  return { total, page, pageSize, groups };
+};
+

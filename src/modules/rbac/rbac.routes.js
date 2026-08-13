@@ -1,5 +1,5 @@
 import express from "express";
-import { getDepartments, getDepartmentUsers, addUser, toggleUserStatus, changeDeptAdmin, getQueues, removeQueue, assignQueues, getUsers, getDepartmentSupervisors } from "./rbac.controller.js";
+import { getDepartments, getDepartmentUsers, addUser, toggleUserStatus, changeDeptAdmin, getQueues, removeQueue, assignQueues, getUsers, getDepartmentSupervisors, getGroups } from "./rbac.controller.js";
 import { authenticateJwt } from "../../middlewares/auth.middleware.js";
 
 const router = express.Router();
@@ -93,5 +93,14 @@ router.get("/get-users",
 router.get("/get-department-supervisors",
     // authenticateJwt,
     getDepartmentSupervisors);
+
+/**
+ * POST /api/v1/rbac/get-groups
+ * Protected. Body: { departmentId? }
+ * Query params: ?page=1&pageSize=10
+ */
+router.post("/get-groups",
+    // authenticateJwt,
+    getGroups);
 
 export default router;
