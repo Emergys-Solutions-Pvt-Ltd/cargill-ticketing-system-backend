@@ -467,64 +467,70 @@ export const assignQueuesModel = async ({ userId, queueIds, createdBy }) => {
 };
 
 /**
- * Fetches all users across all departments for the overview/dashboard table.
- * Returns raw rows with THREE queue-count fields — service picks correct one per role + appType:
- *   queuesViaHierarchy  = DEPT_ADMIN GENERIC:  admin → supervisors → users → distinct queues
- *   queuesViaDirect     = DEPT_ADMIN HR / SUPERVISOR:  direct reports → distinct queues
- *   ownQueues           = USER: own queue assignments
+ * Fetches paginated users for the overview table.
+ * GLOBAL_ADMIN (department_id = NULL) is excluded via INNER JOIN on department.
  *
+ * Per user:
+ *   userId, userName, email, roleCode, roleName, departmentName,
+ *   reportsToName, groupsAssigned (COUNT DISTINCT via user_group),
+ *   isActive, lastLogin, totalCount (window fn — total rows before LIMIT).
+ *
+ * @param {{ limit: number, offset: number }} pagination
  * @returns {Promise<object[]>}
  */
-export const getUsersOverviewModel = async () => {
+export const getUsersOverviewModel = async ({ limit, offset }) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
 
   const query = `
+    WITH base AS (
+      SELECT
+        u.user_id                AS "userId",
+        u.user_name              AS "userName",
+        u.email,
+        r.role_code              AS "roleCode",
+        r.role_name              AS "roleName",
+        d.department_name        AS "departmentName",
+        u.is_active              AS "isActive",
+        u.last_login_at          AS "lastLogin",
+        u.reports_to_user_id     AS "reportsToUserId",
+
+        -- Groups assigned to this user via user_group
+        COUNT(DISTINCT ug.group_id) AS "groupsAssigned"
+
+      FROM   ${rbacSchema}.app_user    u
+      JOIN   ${rbacSchema}.role        r  ON r.role_id       = u.role_id
+      JOIN   ${rbacSchema}.department  d  ON d.department_id = u.department_id
+      LEFT   JOIN ${rbacSchema}.user_group ug ON ug.user_id  = u.user_id
+      GROUP  BY
+        u.user_id, u.user_name, u.email,
+        r.role_code, r.role_name,
+        d.department_name,
+        u.is_active, u.last_login_at, u.reports_to_user_id
+    )
     SELECT
-      u.user_id          AS "userId",
-      u.user_name        AS "userName",
-      u.email,
-      r.role_code        AS "roleCode",
-      r.role_name        AS "roleName",
-      d.department_name  AS "departmentName",
-      u.is_active        AS "isActive",
-      u.last_login_at    AS "lastLogin",
+      b.*,
 
-      -- DEPT_ADMIN GENERIC: admin → supervisors → users → queues (2-level hierarchy)
+      -- Name of the user this person reports to (NULL for SUPERUSER)
       (
-        SELECT COUNT(DISTINCT uq2.queue_id)
-        FROM   ${rbacSchema}.app_user  sup
-        JOIN   ${rbacSchema}.app_user  usr  ON usr.reports_to_user_id = sup.user_id
-        JOIN   ${rbacSchema}.user_queue uq2 ON uq2.user_id            = usr.user_id
-        WHERE  sup.reports_to_user_id = u.user_id
-      ) AS "queuesViaHierarchy",
+        SELECT sup.user_name
+        FROM   ${rbacSchema}.app_user sup
+        WHERE  sup.user_id = b."reportsToUserId"
+        LIMIT  1
+      ) AS "reportsToName",
 
-      -- DEPT_ADMIN HR / SUPERVISOR: direct-report users → queues (1-level)
-      (
-        SELECT COUNT(DISTINCT uq2.queue_id)
-        FROM   ${rbacSchema}.app_user  usr
-        JOIN   ${rbacSchema}.user_queue uq2 ON uq2.user_id = usr.user_id
-        WHERE  usr.reports_to_user_id = u.user_id
-      ) AS "queuesViaDirect",
+      -- Total matching rows before LIMIT — used by service for pagination meta
+      COUNT(*) OVER() AS "totalCount"
 
-      -- USER: own queue assignments
-      COUNT(DISTINCT uq.queue_id) AS "ownQueues"
-
-    FROM   ${rbacSchema}.app_user   u
-    JOIN   ${rbacSchema}.role       r  ON r.role_id       = u.role_id
-    JOIN   ${rbacSchema}.department d  ON d.department_id = u.department_id
-    LEFT   JOIN ${rbacSchema}.user_queue uq ON uq.user_id = u.user_id
-    GROUP  BY
-      u.user_id, u.user_name, u.email,
-      r.role_code, r.role_name,
-      d.department_name,
-      u.is_active, u.last_login_at
-    ORDER  BY d.department_name, r.role_code, u.user_name
+    FROM   base b
+    ORDER  BY b."departmentName", b."roleCode", b."userName"
+    LIMIT  $1 OFFSET $2
   `;
 
-  const result = await pool.query(query);
+  const result = await pool.query(query, [limit, offset]);
   return result.rows;
 };
+
 
 /**
  * Fetches all active departments with their supervisors.

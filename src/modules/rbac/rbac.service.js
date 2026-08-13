@@ -148,44 +148,34 @@ export const assignQueuesService = async ({ userId, queueIds, createdBy }) => {
 };
 
 /**
- * Returns all users across all departments for overview/dashboard table.
- * Each row has uniform fields. queuesAssigned resolved per role + appType:
- *   DEPT_ADMIN + GENERIC → admin → supervisors → users (2-level hierarchy)
- *   DEPT_ADMIN + HR      → admin → users directly (1-level)
- *   SUPERVISOR           → supervisor → users (1-level)
- *   USER                 → own assigned queues
+ * Returns paginated users for the overview table.
+ * Unified response shape — no role-based branching, no APP_TYPE logic.
  *
- * @returns {Promise<object[]>}
+ * @param {{ page?: number, pageSize?: number }} options
+ * @returns {Promise<{ total: number, page: number, pageSize: number, users: object[] }>}
  */
-export const getUsersOverviewService = async () => {
-  const { appType } = getConfig();
-  const rows = await getUsersOverviewModel();
+export const getUsersOverviewService = async ({ page = 1, pageSize = 10 } = {}) => {
+  const limit  = pageSize;
+  const offset = (page - 1) * pageSize;
 
-  return rows.map((u) => {
-    let queuesAssigned;
+  const rows = await getUsersOverviewModel({ limit, offset });
 
-    if (u.roleCode === "DEPARTMENT_ADMIN") {
-      queuesAssigned = appType === "GENERIC"
-        ? Number(u.queuesViaHierarchy)   // 2-level: admin → sup → user → queue
-        : Number(u.queuesViaDirect);      // HR 1-level: admin → user → queue
-    } else if (u.roleCode === "SUPERVISOR") {
-      queuesAssigned = Number(u.queuesViaDirect);  // sup → user → queue
-    } else {
-      queuesAssigned = Number(u.ownQueues);         // user's own queues
-    }
+  const total = rows.length > 0 ? Number(rows[0].totalCount) : 0;
 
-    return {
-      userId:         u.userId,
-      userName:       u.userName,
-      email:          u.email,
-      roleCode:       u.roleCode,
-      roleName:       u.roleName,
-      departmentName: u.departmentName,
-      queuesAssigned,
-      isActive:       u.isActive,
-      lastLogin:      u.lastLogin ?? null,
-    };
-  });
+  const users = rows.map((u) => ({
+    userId:         u.userId,
+    userName:       u.userName,
+    email:          u.email,
+    roleCode:       u.roleCode,
+    roleName:       u.roleName,
+    departmentName: u.departmentName,
+    reportsToName:  u.reportsToName ?? null,
+    groupsAssigned: Number(u.groupsAssigned),
+    isActive:       u.isActive,
+    lastLogin:      u.lastLogin ?? null,
+  }));
+
+  return { total, page, pageSize, users };
 };
 
 /**

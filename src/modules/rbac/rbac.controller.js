@@ -131,12 +131,15 @@ export const assignQueues = asyncWrapper(async (req, res) => {
 
 /**
  * GET /api/v1/rbac/get-users
- * No body needed. Returns all users from all departments.
- * queuesAssigned smart-counted per role + APP_TYPE.
+ * Query params: ?page=1&pageSize=10 (optional)
+ * Returns paginated users from all departments.
  */
 export const getUsers = asyncWrapper(async (req, res) => {
-  const users = await getUsersOverviewService();
-  return res.sendResponse(MESSAGES.usersFetched, users);
+  const page = parseInt(req.query.page, 10) || 1;
+  const pageSize = parseInt(req.query.pageSize, 10) || 10;
+  
+  const result = await getUsersOverviewService({ page, pageSize });
+  return res.sendResponse(MESSAGES.usersFetched, result);
 });
 
 /**
