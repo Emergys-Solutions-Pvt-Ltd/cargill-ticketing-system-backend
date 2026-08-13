@@ -478,6 +478,7 @@ export const assignQueuesModel = async ({ userId, queueIds, createdBy }) => {
  * @param {{ limit: number, offset: number }} pagination
  * @returns {Promise<object[]>}
  */
+
 export const getUsersOverviewModel = async ({ limit, offset }) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
@@ -485,49 +486,63 @@ export const getUsersOverviewModel = async ({ limit, offset }) => {
   const query = `
     WITH base AS (
       SELECT
-        u.user_id                AS "userId",
-        u.user_name              AS "userName",
+        u.user_id            AS "userId",
+        u.user_name          AS "userName",
         u.email,
-        r.role_code              AS "roleCode",
-        r.role_name              AS "roleName",
-        d.department_name        AS "departmentName",
-        u.is_active              AS "isActive",
-        u.last_login_at          AS "lastLogin",
-        u.reports_to_user_id     AS "reportsToUserId",
+        r.role_code          AS "roleCode",
+        r.role_name          AS "roleName",
+        d.department_name    AS "departmentName",
+        u.is_active          AS "isActive",
+        u.last_login_at      AS "lastLogin",
+        u.reports_to_user_id AS "reportsToUserId",
 
-        -- Groups assigned to this user via user_group
-        COUNT(DISTINCT ug.group_id) AS "groupsAssigned"
+        -- Count UNIQUE groups assigned to this user
+        -- and all users directly reporting to this user
+        (
+          SELECT COUNT(DISTINCT ug.group_id)
+          FROM ${rbacSchema}.user_group ug
+          JOIN ${rbacSchema}.app_user assigned_user
+            ON assigned_user.user_id = ug.user_id
+          WHERE
+            assigned_user.user_id = u.user_id
+            OR assigned_user.reports_to_user_id = u.user_id
+        ) AS "groupsAssigned"
 
-      FROM   ${rbacSchema}.app_user    u
-      JOIN   ${rbacSchema}.role        r  ON r.role_id       = u.role_id
-      JOIN   ${rbacSchema}.department  d  ON d.department_id = u.department_id
-      LEFT   JOIN ${rbacSchema}.user_group ug ON ug.user_id  = u.user_id
-      GROUP  BY
-        u.user_id, u.user_name, u.email,
-        r.role_code, r.role_name,
-        d.department_name,
-        u.is_active, u.last_login_at, u.reports_to_user_id
+      FROM ${rbacSchema}.app_user u
+
+      JOIN ${rbacSchema}.role r
+        ON r.role_id = u.role_id
+
+      JOIN ${rbacSchema}.department d
+        ON d.department_id = u.department_id
     )
+
     SELECT
       b.*,
 
-      -- Name of the user this person reports to (NULL for SUPERUSER)
+      -- Name of the user this person reports to
       (
         SELECT sup.user_name
-        FROM   ${rbacSchema}.app_user sup
-        WHERE  sup.user_id = b."reportsToUserId"
-        LIMIT  1
+        FROM ${rbacSchema}.app_user sup
+        WHERE sup.user_id = b."reportsToUserId"
+        LIMIT 1
       ) AS "reportsToName",
 
-      -- Total matching rows before LIMIT — used by service for pagination meta
+      -- Total records before pagination
       COUNT(*) OVER() AS "totalCount"
 
-    FROM   base b
-    ORDER  BY b."departmentName", b."roleCode", b."userName"
-    LIMIT  $1 OFFSET $2
+    FROM base b
+
+    ORDER BY
+      b."departmentName",
+      b."roleCode",
+      b."userName"
+
+    LIMIT $1 OFFSET $2
   `;
 
   const result = await pool.query(query, [limit, offset]);
+
   return result.rows;
 };
 
