@@ -475,11 +475,10 @@ export const assignQueuesModel = async ({ userId, queueIds, createdBy }) => {
  *   reportsToName, groupsAssigned (COUNT DISTINCT via user_group),
  *   isActive, lastLogin, totalCount (window fn — total rows before LIMIT).
  *
- * @param {{ limit: number, offset: number }} pagination
+ * @param {{ limit: number, offset: number, departmentId?: number }} options
  * @returns {Promise<object[]>}
  */
-
-export const getUsersOverviewModel = async ({ limit, offset }) => {
+export const getUsersOverviewModel = async ({ limit, offset, departmentId }) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
 
@@ -515,6 +514,8 @@ export const getUsersOverviewModel = async ({ limit, offset }) => {
 
       JOIN ${rbacSchema}.department d
         ON d.department_id = u.department_id
+      
+      ${departmentId ? `WHERE u.department_id = $3` : ''}
     )
 
     SELECT
@@ -541,7 +542,12 @@ export const getUsersOverviewModel = async ({ limit, offset }) => {
     LIMIT $1 OFFSET $2
   `;
 
-  const result = await pool.query(query, [limit, offset]);
+  const params = [limit, offset];
+  if (departmentId) {
+    params.push(departmentId);
+  }
+
+  const result = await pool.query(query, params);
 
   return result.rows;
 };

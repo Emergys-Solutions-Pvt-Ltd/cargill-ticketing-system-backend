@@ -130,15 +130,17 @@ export const assignQueues = asyncWrapper(async (req, res) => {
 });
 
 /**
- * GET /api/v1/rbac/get-users
+ * POST /api/v1/rbac/get-users
  * Query params: ?page=1&pageSize=10 (optional)
- * Returns paginated users from all departments.
+ * Body: { departmentId? } (optional)
+ * Returns paginated users from all departments or filtered by departmentId.
  */
 export const getUsers = asyncWrapper(async (req, res) => {
   const page = parseInt(req.query.page, 10) || 1;
   const pageSize = parseInt(req.query.pageSize, 10) || 10;
+  const { departmentId } = req.body ?? {};
   
-  const result = await getUsersOverviewService({ page, pageSize });
+  const result = await getUsersOverviewService({ page, pageSize, departmentId });
   return res.sendResponse(MESSAGES.usersFetched, result);
 });
 

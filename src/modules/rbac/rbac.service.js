@@ -151,14 +151,14 @@ export const assignQueuesService = async ({ userId, queueIds, createdBy }) => {
  * Returns paginated users for the overview table.
  * Unified response shape — no role-based branching, no APP_TYPE logic.
  *
- * @param {{ page?: number, pageSize?: number }} options
+ * @param {{ page?: number, pageSize?: number, departmentId?: number }} options
  * @returns {Promise<{ total: number, page: number, pageSize: number, users: object[] }>}
  */
-export const getUsersOverviewService = async ({ page = 1, pageSize = 10 } = {}) => {
+export const getUsersOverviewService = async ({ page = 1, pageSize = 10, departmentId } = {}) => {
   const limit  = pageSize;
   const offset = (page - 1) * pageSize;
 
-  const rows = await getUsersOverviewModel({ limit, offset });
+  const rows = await getUsersOverviewModel({ limit, offset, departmentId });
 
   const total = rows.length > 0 ? Number(rows[0].totalCount) : 0;
 

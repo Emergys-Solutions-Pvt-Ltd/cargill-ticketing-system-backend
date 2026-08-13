@@ -79,10 +79,12 @@ router.post("/assign-queues",
     assignQueues);
 
 /**
- * POST /api/v1/rbac/get-users-overview
- * No body. All users all departments, smart queue count per role.
+ * POST /api/v1/rbac/get-users
+ * Body: { departmentId? } (optional)
+ * Query params: ?page=1&pageSize=10 (optional)
+ * All users across all/one department, paginated.
  */
-router.get("/get-users",
+router.post("/get-users",
     // authenticateJwt,
     getUsers);
 
