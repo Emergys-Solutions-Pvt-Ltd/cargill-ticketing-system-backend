@@ -30,29 +30,29 @@ export const getDepartmentUsers = asyncWrapper(async (req, res) => {
 
 /**
  * POST /api/v1/rbac/add-user
- * Body: { roleCode, userName, email, departmentId, reportsToUserId?, assignedQueueIds? }
- * assignedQueueIds — array of queue IDs, applied only for USER role.
+ * Body: { roleCode, userName, email, phoneNo?, departmentId, reportsToUserId?, assignedGroupIds? }
+ * assignedGroupIds — array of group IDs.
  */
 export const addUser = asyncWrapper(async (req, res) => {
   const {
     roleCode,
     userName,
     email,
+    phoneNo,
     departmentId,
     reportsToUserId,
-    assignedQueueIds = [],  // array of queue IDs
+    assignedGroupIds = [],  // array of group IDs
   } = req.body ?? {};
 
-  const createdBy = req.user?.email;
+  const createdBy = req.user?.userId || 1;
 
   const result = await addUserService({
-    roleCode, userName, email, departmentId,
-    reportsToUserId, assignedQueueIds, createdBy,
+    roleCode, userName, email, phoneNo, departmentId,
+    reportsToUserId, assignedGroupIds, createdBy,
   });
 
-  if (result?.error === "EMAIL_EXISTS")     return res.sendResponse(MESSAGES.userAlreadyExists);
-  if (result?.error === "DEPT_ADMIN_EXISTS") return res.sendResponse(MESSAGES.deptAdminAlreadyExists);
-  if (result?.error === "INVALID_ROLE")     return res.sendResponse(MESSAGES.validationError);
+  if (result?.error === "EMAIL_EXISTS") return res.sendResponse(MESSAGES.userAlreadyExists);
+  if (result?.error === "INVALID_ROLE") return res.sendResponse(MESSAGES.validationError);
 
   return res.sendResponse(MESSAGES.userAdded, { userId: result.userId });
 });
@@ -139,7 +139,7 @@ export const getUsers = asyncWrapper(async (req, res) => {
   const page = parseInt(req.query.page, 10) || 1;
   const pageSize = parseInt(req.query.pageSize, 10) || 10;
   const { departmentId } = req.body ?? {};
-  
+
   const result = await getUsersOverviewService({ page, pageSize, departmentId });
   return res.sendResponse(MESSAGES.usersFetched, result);
 });
@@ -164,7 +164,7 @@ export const getGroups = asyncWrapper(async (req, res) => {
   const page = parseInt(req.query.page, 10) || 1;
   const pageSize = parseInt(req.query.pageSize, 10) || 10;
   const { departmentId } = req.body ?? {};
-  
+
   const result = await getGroupsService({ page, pageSize, departmentId });
   return res.sendResponse(MESSAGES.groupsFetched, result);
 });

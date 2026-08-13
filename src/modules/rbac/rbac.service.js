@@ -13,12 +13,12 @@ export const getDepartmentStatsService = async (departmentId = null) => {
   const rows = await getDepartmentStatsModel(departmentId);
 
   return rows.map((dept) => ({
-    departmentId:   dept.departmentId,
+    departmentId: dept.departmentId,
     departmentCode: dept.departmentCode,
     departmentName: dept.departmentName,
     superUserCount: Number(dept.superUserCount),
-    userCount:      Number(dept.userCount),
-    groupCount:     Number(dept.groupCount),
+    userCount: Number(dept.userCount),
+    groupCount: Number(dept.groupCount),
   }));
 };
 
@@ -88,14 +88,14 @@ export const getDepartmentUsersService = async (filters = {}) => {
 };
 
 /**
- * Inserts a new user. Validates email uniqueness and dept admin uniqueness.
- * Assigns queues via jsonb_to_recordset for USER role only.
+ * Inserts a new user. Validates email uniqueness.
+ * Assigns groups if provided.
  *
- * @param {{ roleCode, userName, email, departmentId, reportsToUserId?, assignedQueueIds?, createdBy? }} data
+ * @param {{ roleCode, userName, email, phoneNo?, departmentId, reportsToUserId?, assignedGroupIds?, createdBy? }} data
  * @returns {Promise<{ userId: number } | { error: string }>}
  */
-export const addUserService = async ({ roleCode, userName, email, departmentId, reportsToUserId, assignedQueueIds = [], createdBy }) => {
-  return addUserModel({ roleCode, userName, email, departmentId, reportsToUserId, assignedQueueIds, createdBy });
+export const addUserService = async ({ roleCode, userName, email, phoneNo, departmentId, reportsToUserId, assignedGroupIds = [], createdBy }) => {
+  return addUserModel({ roleCode, userName, email, phoneNo, departmentId, reportsToUserId, assignedGroupIds, createdBy });
 };
 
 /**
@@ -155,7 +155,7 @@ export const assignQueuesService = async ({ userId, queueIds, createdBy }) => {
  * @returns {Promise<{ total: number, page: number, pageSize: number, users: object[] }>}
  */
 export const getUsersOverviewService = async ({ page = 1, pageSize = 10, departmentId } = {}) => {
-  const limit  = pageSize;
+  const limit = pageSize;
   const offset = (page - 1) * pageSize;
 
   const rows = await getUsersOverviewModel({ limit, offset, departmentId });
@@ -163,16 +163,16 @@ export const getUsersOverviewService = async ({ page = 1, pageSize = 10, departm
   const total = rows.length > 0 ? Number(rows[0].totalCount) : 0;
 
   const users = rows.map((u) => ({
-    userId:         u.userId,
-    userName:       u.userName,
-    email:          u.email,
-    roleCode:       u.roleCode,
-    roleName:       u.roleName,
+    userId: u.userId,
+    userName: u.userName,
+    email: u.email,
+    roleCode: u.roleCode,
+    roleName: u.roleName,
     departmentName: u.departmentName,
-    reportsToName:  u.reportsToName ?? null,
+    reportsToName: u.reportsToName ?? null,
     groupsAssigned: Number(u.groupsAssigned),
-    isActive:       u.isActive,
-    lastLogin:      u.lastLogin ?? null,
+    isActive: u.isActive,
+    lastLogin: u.lastLogin ?? null,
   }));
 
   return { total, page, pageSize, users };
@@ -194,15 +194,15 @@ export const getDepartmentSupervisorsService = async () => {
   rows.forEach((row) => {
     if (!deptMap.has(row.departmentId)) {
       deptMap.set(row.departmentId, {
-        departmentId:   row.departmentId,
+        departmentId: row.departmentId,
         departmentName: row.departmentName,
-        supervisors:    [],
+        supervisors: [],
       });
     }
 
     if (row.supervisorId !== null) {
       deptMap.get(row.departmentId).supervisors.push({
-        userId:   row.supervisorId,
+        userId: row.supervisorId,
         userName: row.supervisorName,
       });
     }
@@ -218,7 +218,7 @@ export const getDepartmentSupervisorsService = async () => {
  * @returns {Promise<{ total: number, page: number, pageSize: number, groups: object[] }>}
  */
 export const getGroupsService = async ({ page = 1, pageSize = 10, departmentId } = {}) => {
-  const limit  = pageSize;
+  const limit = pageSize;
   const offset = (page - 1) * pageSize;
 
   const rows = await getGroupsModel({ limit, offset, departmentId });
@@ -226,12 +226,12 @@ export const getGroupsService = async ({ page = 1, pageSize = 10, departmentId }
   const total = rows.length > 0 ? Number(rows[0].totalCount) : 0;
 
   const groups = rows.map((g) => ({
-    groupId:          g.groupId,
-    groupName:        g.groupName,
+    groupId: g.groupId,
+    groupName: g.groupName,
     groupDescription: g.groupDescription ?? null,
-    departmentName:   g.departmentName,
-    queuesAssigned:   Number(g.queuesAssigned),
-    usersAssigned:    Number(g.usersAssigned)
+    departmentName: g.departmentName,
+    queuesAssigned: Number(g.queuesAssigned),
+    usersAssigned: Number(g.usersAssigned)
   }));
 
   return { total, page, pageSize, groups };

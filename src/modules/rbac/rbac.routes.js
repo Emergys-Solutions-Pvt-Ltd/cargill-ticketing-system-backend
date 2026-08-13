@@ -6,6 +6,7 @@ const router = express.Router();
 
 /**
  * POST /api/v1/rbac/get-departments
+  * Body: { departmentId? }  — omit for all departments.
  * Protected. No body needed.
  * Returns all departments with admin name + stats.
  */
@@ -24,14 +25,15 @@ router.post("/get-department-users",
 
 /**
  * POST /api/v1/rbac/add-user
- * Protected. Body: {  }
- * @Body { 
+ * Protected. Body:
+ * {
  *  roleCode: string,
  *  userName: string,
  *  email: string,
+ *  phoneNo?: string,
  *  departmentId: string,
- *  reportsToUserId: number,
- *  assignedQueueId: number,
+ *  reportsToUserId?: number,
+ *  assignedGroupIds?: number[],
  * }
  */
 router.post("/add-user",

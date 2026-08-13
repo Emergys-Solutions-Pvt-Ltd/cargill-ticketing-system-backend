@@ -176,7 +176,7 @@ export const getDepartmentUsersModel = async ({ userId, departmentId } = {}) => 
   return result.rows;
 };
 
-export const addUserModel = async ({ roleCode, userName, email, departmentId, reportsToUserId, assignedQueueIds = [], createdBy }) => {
+export const addUserModel = async ({ roleCode, userName, email, phoneNo, departmentId, reportsToUserId, assignedGroupIds = [], createdBy }) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
   const client = await pool.connect();
@@ -194,25 +194,7 @@ export const addUserModel = async ({ roleCode, userName, email, departmentId, re
       return { error: "EMAIL_EXISTS" };
     }
 
-    // 2. Department Admin uniqueness check — only one active DEPT_ADMIN per department
-    if (roleCode === "DEPARTMENT_ADMIN") {
-      const adminCheck = await client.query(
-        `SELECT u.user_id
-         FROM ${rbacSchema}.app_user u
-         INNER JOIN ${rbacSchema}.role r ON r.role_id = u.role_id
-         WHERE u.department_id = $1
-           AND r.role_code     = 'DEPARTMENT_ADMIN'
-           AND u.is_active     = TRUE
-         LIMIT 1`,
-        [departmentId]
-      );
-      if (adminCheck.rows.length > 0) {
-        await client.query("ROLLBACK");
-        return { error: "DEPT_ADMIN_EXISTS" };
-      }
-    }
-
-    // 3. Resolve role_id from roleCode
+    // 2. Resolve role_id from roleCode
     const roleResult = await client.query(
       `SELECT role_id FROM ${rbacSchema}.role WHERE role_code = $1 LIMIT 1`,
       [roleCode]
@@ -223,28 +205,28 @@ export const addUserModel = async ({ roleCode, userName, email, departmentId, re
     }
     const roleId = roleResult.rows[0].role_id;
 
-    // 4. Insert user — RETURNING user_id for queue assignment
+    // 3. Insert user — RETURNING user_id for group assignment
     const insertResult = await client.query(
       `INSERT INTO ${rbacSchema}.app_user
-         (user_name, email, role_id, department_id, reports_to_user_id, is_active, created_by, created_at)
-       VALUES ($1, $2, $3, $4, $5, TRUE, $6, CURRENT_TIMESTAMP)
+         (user_name, email, phone_no, role_id, department_id, reports_to_user_id, is_active, created_by, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7, CURRENT_TIMESTAMP)
        RETURNING user_id`,
-      [userName, email, roleId, departmentId, reportsToUserId ?? null, createdBy]
+      [userName, email, phoneNo ?? null, roleId, departmentId, reportsToUserId ?? null, createdBy]
     );
     const userId = insertResult.rows[0].user_id;
 
-    // 5. Queue assignment — only for USER role, only if queue IDs provided
-    if (roleCode === "USER" && assignedQueueIds.length > 0) {
-      // jsonb_to_recordset: pass array of {queue_id} objects as JSONB
-      const queuesJson = JSON.stringify(
-        assignedQueueIds.map((id) => ({ queue_id: id }))
+    // 4. Group assignment — if any group IDs provided
+    if (assignedGroupIds.length > 0) {
+      // jsonb_to_recordset: pass array of {group_id} objects as JSONB
+      const groupsJson = JSON.stringify(
+        assignedGroupIds.map((id) => ({ group_id: id }))
       );
 
       await client.query(
-        `INSERT INTO ${rbacSchema}.user_queue (user_id, queue_id, created_by, created_at)
-         SELECT $1, q.queue_id, $2, CURRENT_TIMESTAMP
-         FROM jsonb_to_recordset($3::jsonb) AS q(queue_id BIGINT)`,
-        [userId, createdBy, queuesJson]
+        `INSERT INTO ${rbacSchema}.user_group (user_id, group_id, assigned_by, assigned_at)
+         SELECT $1, g.group_id, $2, CURRENT_TIMESTAMP
+         FROM jsonb_to_recordset($3::jsonb) AS g(group_id BIGINT)`,
+        [userId, createdBy, groupsJson]
       );
     }
 
