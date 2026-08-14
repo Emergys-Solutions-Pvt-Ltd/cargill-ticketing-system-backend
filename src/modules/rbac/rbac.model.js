@@ -632,3 +632,89 @@ export const getGroupsModel = async ({ limit, offset, departmentId }) => {
   const result = await pool.query(query, params);
   return result.rows;
 };
+
+/**
+ * Creates a new group and optionally assigns queues via group_queue.
+ * Validates group name uniqueness, department existence, and queue-department match.
+ *
+ * @param {{ groupName: string, groupDescription?: string, departmentId: number, assignedQueueIds?: number[], createdBy: number }} params
+ * @returns {Promise<{ groupId: number } | { error: string }>}
+ */
+export const addGroupModel = async ({ groupName, groupDescription, departmentId, assignedQueueIds = [], createdBy }) => {
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const nameCheck = await client.query(
+      `SELECT group_id
+       FROM ${rbacSchema}.groups
+       WHERE LOWER(TRIM(group_name)) = LOWER(TRIM($1))
+       LIMIT 1`,
+      [groupName]
+    );
+    if (nameCheck.rows.length > 0) {
+      await client.query("ROLLBACK");
+      return { error: "GROUP_NAME_EXISTS" };
+    }
+
+    const deptCheck = await client.query(
+      `SELECT department_id
+       FROM ${rbacSchema}.department
+       WHERE department_id = $1 LIMIT 1`,
+      [departmentId]
+    );
+    if (!deptCheck.rows[0]) {
+      await client.query("ROLLBACK");
+      return { error: "INVALID_DEPARTMENT" };
+    }
+
+    if (assignedQueueIds.length > 0) {
+      const queueCheck = await client.query(
+        `SELECT queue_id
+         FROM ${rbacSchema}.queue
+         WHERE queue_id = ANY($1::bigint[])
+           AND department_id = $2`,
+        [assignedQueueIds, departmentId]
+      );
+      if (queueCheck.rows.length !== assignedQueueIds.length) {
+        await client.query("ROLLBACK");
+        return { error: "INVALID_QUEUES" };
+      }
+    }
+
+    const insertResult = await client.query(
+      `INSERT INTO ${rbacSchema}.groups
+         (group_name, group_description, department_id, is_active, created_by, created_at)
+       VALUES ($1, $2, $3, TRUE, $4, CURRENT_TIMESTAMP)
+       RETURNING group_id`,
+      [groupName.trim(), groupDescription?.trim() ?? null, departmentId, createdBy]
+    );
+    const groupId = insertResult.rows[0].group_id;
+
+    if (assignedQueueIds.length > 0) {
+      const queuesJson = JSON.stringify(
+        assignedQueueIds.map((id) => ({ queue_id: id }))
+      );
+
+      await client.query(
+        `INSERT INTO ${rbacSchema}.group_queue (group_id, queue_id, created_by, created_at)
+         SELECT $1, q.queue_id, $2, CURRENT_TIMESTAMP
+         FROM jsonb_to_recordset($3::jsonb) AS q(queue_id BIGINT)
+         ON CONFLICT (group_id, queue_id) DO NOTHING`,
+        [groupId, createdBy, queuesJson]
+      );
+    }
+
+    await client.query("COMMIT");
+    return { groupId };
+
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+};

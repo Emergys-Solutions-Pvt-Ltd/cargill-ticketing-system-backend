@@ -1,4 +1,4 @@
-import { getDepartmentStatsModel, getDepartmentUsersModel, addUserModel, toggleUserStatusModel, changeDepartmentAdminModel, getQueuesModel, removeUserQueueModel, assignQueuesModel, getUsersOverviewModel, getDepartmentSupervisorsModel, getGroupsModel } from "./rbac.model.js";
+import { getDepartmentStatsModel, getDepartmentUsersModel, addUserModel, toggleUserStatusModel, changeDepartmentAdminModel, getQueuesModel, removeUserQueueModel, assignQueuesModel, getUsersOverviewModel, getDepartmentSupervisorsModel, getGroupsModel, addGroupModel } from "./rbac.model.js";
 import { getConfig } from "../../config/env.config.js";
 
 /**
@@ -235,5 +235,23 @@ export const getGroupsService = async ({ page = 1, pageSize = 10, departmentId }
   }));
 
   return { total, page, pageSize, groups };
+};
+
+/**
+ * Creates a new group with optional queue assignments.
+ *
+ * @param {{ groupName: string, groupDescription?: string, departmentId: number, assignedQueueIds?: number[], createdBy: number }} data
+ * @returns {Promise<{ groupId: number } | { error: string }>}
+ */
+export const addGroupService = async ({ groupName, groupDescription, departmentId, assignedQueueIds = [], createdBy }) => {
+  const uniqueQueueIds = [...new Set(assignedQueueIds)];
+
+  return addGroupModel({
+    groupName,
+    groupDescription,
+    departmentId,
+    assignedQueueIds: uniqueQueueIds,
+    createdBy,
+  });
 };
 

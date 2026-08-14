@@ -124,4 +124,24 @@ export const MESSAGES = {
     statusCode: 200,
     messageText: "Groups fetched successfully.",
   },
+  groupAdded: {
+    statusFlag: true,
+    statusCode: 200,
+    messageText: "Group created successfully.",
+  },
+  groupAlreadyExists: {
+    statusFlag: false,
+    statusCode: 409,
+    messageText: "This group name is already in use. Please enter a different name.",
+  },
+  invalidDepartment: {
+    statusFlag: false,
+    statusCode: 404,
+    messageText: "Department not found.",
+  },
+  invalidQueues: {
+    statusFlag: false,
+    statusCode: 422,
+    messageText: "One or more queues are invalid or do not belong to the selected department.",
+  },
 };

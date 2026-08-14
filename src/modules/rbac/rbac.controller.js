@@ -1,4 +1,4 @@
-import { getDepartmentStatsService, getDepartmentUsersService, addUserService, toggleUserStatusService, changeDepartmentAdminService, getQueuesService, removeQueueService, assignQueuesService, getUsersOverviewService, getDepartmentSupervisorsService, getGroupsService } from "./rbac.service.js";
+import { getDepartmentStatsService, getDepartmentUsersService, addUserService, toggleUserStatusService, changeDepartmentAdminService, getQueuesService, removeQueueService, assignQueuesService, getUsersOverviewService, getDepartmentSupervisorsService, getGroupsService, addGroupService } from "./rbac.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
 import asyncWrapper from "../../utils/asyncWrapper.js";
 
@@ -167,5 +167,39 @@ export const getGroups = asyncWrapper(async (req, res) => {
 
   const result = await getGroupsService({ page, pageSize, departmentId });
   return res.sendResponse(MESSAGES.groupsFetched, result);
+});
+
+/**
+ * POST /api/v1/rbac/add-group
+ * Body: { groupName, groupDescription?, departmentId, assignedQueueIds? }
+ */
+export const addGroup = asyncWrapper(async (req, res) => {
+  console.log("hello")
+  const {
+    groupName,
+    groupDescription,
+    departmentId,
+    assignedQueueIds = [],
+  } = req.body ?? {};
+
+  if (!groupName?.trim() || !departmentId) {
+    return res.sendResponse(MESSAGES.validationError);
+  }
+
+  const createdBy = req.user?.userId || 1;
+
+  const result = await addGroupService({
+    groupName,
+    groupDescription,
+    departmentId,
+    assignedQueueIds,
+    createdBy,
+  });
+
+  if (result?.error === "GROUP_NAME_EXISTS") return res.sendResponse(MESSAGES.groupAlreadyExists);
+  if (result?.error === "INVALID_DEPARTMENT") return res.sendResponse(MESSAGES.invalidDepartment);
+  if (result?.error === "INVALID_QUEUES") return res.sendResponse(MESSAGES.invalidQueues);
+
+  return res.sendResponse(MESSAGES.groupAdded, { groupId: result.groupId });
 });
 
