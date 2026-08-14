@@ -1,4 +1,4 @@
-import { getDepartmentStatsService, getDepartmentUsersService, addUserService, toggleUserStatusService, changeDepartmentAdminService, getQueuesService, removeQueueService, getUsersOverviewService, getDepartmentSupervisorsService, getGroupsService, addGroupService, assignQueuesToGroupService } from "./rbac.service.js";
+import { getDepartmentStatsService, getDepartmentUsersService, addUserService, toggleUserStatusService, changeDepartmentAdminService, getQueuesService, removeQueueService, getUsersOverviewService, getDepartmentSupervisorsService, getGroupsService, addGroupService, assignQueuesToGroupService, assignGroupsToUserService } from "./rbac.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
 import asyncWrapper from "../../utils/asyncWrapper.js";
 
@@ -210,5 +210,26 @@ export const addQueuesToGroup = asyncWrapper(async (req, res) => {
   if (result?.error === "INVALID_QUEUES") return res.sendResponse(MESSAGES.invalidQueues);
 
   return res.sendResponse(MESSAGES.queuesAddedToGroup, { inserted: result.inserted });
+});
+
+/**
+ * POST /api/v1/rbac/assign-group-to-user
+ * Body: { userId: number, groupIds: number[] }
+ * Adds the selected groups to the user. Existing assignments are left intact.
+ */
+export const assignGroupsToUser = asyncWrapper(async (req, res) => {
+  const { userId, groupIds = [] } = req.body ?? {};
+
+  if (!userId || !Array.isArray(groupIds) || groupIds.length === 0) {
+    return res.sendResponse(MESSAGES.validationError);
+  }
+
+  const assignedBy = req.user?.userId || 1;
+  const result = await assignGroupsToUserService({ userId, groupIds, assignedBy });
+
+  if (result?.error === "USER_NOT_FOUND") return res.sendResponse(MESSAGES.userNotFound);
+  if (result?.error === "INVALID_GROUPS") return res.sendResponse(MESSAGES.invalidGroups);
+
+  return res.sendResponse(MESSAGES.groupsAssignedToUser, { inserted: result.inserted });
 });
 

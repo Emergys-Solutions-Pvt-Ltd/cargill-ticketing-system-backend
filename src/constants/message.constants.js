@@ -154,4 +154,19 @@ export const MESSAGES = {
     statusCode: 200,
     messageText: "Queues added to group successfully.",
   },
+  userNotFound: {
+    statusFlag: false,
+    statusCode: 404,
+    messageText: "User not found or inactive.",
+  },
+  invalidGroups: {
+    statusFlag: false,
+    statusCode: 422,
+    messageText: "One or more groups are invalid, inactive, or do not belong to the user's department.",
+  },
+  groupsAssignedToUser: {
+    statusFlag: true,
+    statusCode: 200,
+    messageText: "Groups assigned to user successfully.",
+  },
 };

@@ -1,4 +1,4 @@
-import { getDepartmentStatsModel, getDepartmentUsersModel, addUserModel, toggleUserStatusModel, changeDepartmentAdminModel, getQueuesModel, removeUserQueueModel, getUsersOverviewModel, getDepartmentSupervisorsModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel } from "./rbac.model.js";
+import { getDepartmentStatsModel, getDepartmentUsersModel, addUserModel, toggleUserStatusModel, changeDepartmentAdminModel, getQueuesModel, removeUserQueueModel, getUsersOverviewModel, getDepartmentSupervisorsModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel, assignGroupsToUserModel } from "./rbac.model.js";
 import { getConfig } from "../../config/env.config.js";
 
 /**
@@ -260,6 +260,22 @@ export const assignQueuesToGroupService = async ({ groupId, queueIds, createdBy 
     groupId,
     queueIds: uniqueQueueIds,
     createdBy,
+  });
+};
+
+/**
+ * Adds groups to an existing user. Every group must belong to the user's department.
+ *
+ * @param {{ userId: number, groupIds: number[], assignedBy: number }} data
+ * @returns {Promise<{ inserted: number } | { error: string }>}
+ */
+export const assignGroupsToUserService = async ({ userId, groupIds, assignedBy }) => {
+  const uniqueGroupIds = [...new Set(groupIds)];
+
+  return assignGroupsToUserModel({
+    userId,
+    groupIds: uniqueGroupIds,
+    assignedBy,
   });
 };
 

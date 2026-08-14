@@ -743,3 +743,64 @@ export const assignQueuesToGroupModel = async ({ groupId, queueIds, createdBy })
 
   return { inserted: result.rowCount };
 };
+
+/**
+ * Adds group assignments for a user through user_group.
+ * Validates that all groups are active and belong to the user's department.
+ * Existing assignments are not duplicated.
+ *
+ * @param {{ userId: number, groupIds: number[], assignedBy: number }} params
+ * @returns {Promise<{ inserted: number } | { error: string }>}
+ */
+export const assignGroupsToUserModel = async ({ userId, groupIds, assignedBy }) => {
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const userResult = await client.query(
+      `SELECT user_id, department_id
+       FROM ${rbacSchema}.app_user
+       WHERE user_id = $1
+         AND is_active = TRUE
+       LIMIT 1`,
+      [userId]
+    );
+    const user = userResult.rows[0];
+    if (!user) {
+      await client.query("ROLLBACK");
+      return { error: "USER_NOT_FOUND" };
+    }
+
+    const groupsResult = await client.query(
+      `SELECT group_id
+       FROM ${rbacSchema}.groups
+       WHERE group_id = ANY($1::bigint[])
+         AND department_id = $2
+         AND is_active = TRUE`,
+      [groupIds, user.department_id]
+    );
+    if (groupsResult.rows.length !== groupIds.length) {
+      await client.query("ROLLBACK");
+      return { error: "INVALID_GROUPS" };
+    }
+
+    const result = await client.query(
+      `INSERT INTO ${rbacSchema}.user_group (user_id, group_id, assigned_by, assigned_at)
+       SELECT $1, selected.group_id, $2, CURRENT_TIMESTAMP
+       FROM unnest($3::bigint[]) AS selected(group_id)
+       ON CONFLICT (user_id, group_id) DO NOTHING`,
+      [userId, assignedBy, groupIds]
+    );
+
+    await client.query("COMMIT");
+    return { inserted: result.rowCount };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+};

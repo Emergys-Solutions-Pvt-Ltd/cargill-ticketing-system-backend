@@ -1,5 +1,5 @@
 import express from "express";
-import { getDepartments, getDepartmentUsers, addUser, toggleUserStatus, changeDeptAdmin, getQueues, removeQueue, getUsers, getDepartmentSupervisors, getGroups, addGroup, addQueuesToGroup } from "./rbac.controller.js";
+import { getDepartments, getDepartmentUsers, addUser, toggleUserStatus, changeDeptAdmin, getQueues, removeQueue, getUsers, getDepartmentSupervisors, getGroups, addGroup, addQueuesToGroup, assignGroupsToUser } from "./rbac.controller.js";
 import { authenticateJwt } from "../../middlewares/auth.middleware.js";
 
 const router = express.Router();
@@ -124,5 +124,13 @@ router.post("/get-groups",
 router.post("/add-queues-to-group",
     // authenticateJwt,
     addQueuesToGroup);
+
+/**
+ * POST /api/v1/rbac/assign-group-to-user
+ * Body: { userId: number, groupIds: number[] }
+ */
+router.post("/assign-group-to-user",
+    // authenticateJwt,
+    assignGroupsToUser);
 
 export default router;
