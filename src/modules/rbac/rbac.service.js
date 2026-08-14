@@ -1,4 +1,4 @@
-import { getDepartmentStatsModel, getDepartmentUsersModel, addUserModel, toggleUserStatusModel, changeDepartmentAdminModel, getQueuesModel, removeUserQueueModel, assignQueuesModel, getUsersOverviewModel, getDepartmentSupervisorsModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel } from "./rbac.model.js";
+import { getDepartmentStatsModel, getDepartmentUsersModel, addUserModel, toggleUserStatusModel, changeDepartmentAdminModel, getQueuesModel, removeUserQueueModel, getUsersOverviewModel, getDepartmentSupervisorsModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel } from "./rbac.model.js";
 import { getConfig } from "../../config/env.config.js";
 
 /**

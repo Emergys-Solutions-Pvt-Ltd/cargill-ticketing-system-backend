@@ -1,4 +1,4 @@
-import { getDepartmentStatsService, getDepartmentUsersService, addUserService, toggleUserStatusService, changeDepartmentAdminService, getQueuesService, removeQueueService, assignQueuesService, getUsersOverviewService, getDepartmentSupervisorsService, getGroupsService, addGroupService, assignQueuesToGroupService } from "./rbac.service.js";
+import { getDepartmentStatsService, getDepartmentUsersService, addUserService, toggleUserStatusService, changeDepartmentAdminService, getQueuesService, removeQueueService, getUsersOverviewService, getDepartmentSupervisorsService, getGroupsService, addGroupService, assignQueuesToGroupService } from "./rbac.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
 import asyncWrapper from "../../utils/asyncWrapper.js";
 

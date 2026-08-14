@@ -1,5 +1,5 @@
 import express from "express";
-import { getDepartments, getDepartmentUsers, addUser, toggleUserStatus, changeDeptAdmin, getQueues, removeQueue, assignQueues, getUsers, getDepartmentSupervisors, getGroups, addGroup, addQueuesToGroup } from "./rbac.controller.js";
+import { getDepartments, getDepartmentUsers, addUser, toggleUserStatus, changeDeptAdmin, getQueues, removeQueue, getUsers, getDepartmentSupervisors, getGroups, addGroup, addQueuesToGroup } from "./rbac.controller.js";
 import { authenticateJwt } from "../../middlewares/auth.middleware.js";
 
 const router = express.Router();
