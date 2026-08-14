@@ -96,17 +96,18 @@ export const changeDeptAdmin = asyncWrapper(async (req, res) => {
 
 /**
  * POST /api/v1/rbac/get-queues
- * Body: { departmentId: number }
- * Returns all active queues in the selected department.
+ * Body: { groupId?: number, departmentId?: number }
+ * groupId takes precedence and returns queues assigned to that group.
+ * Otherwise, returns all active queues in the selected department.
  */
 export const getQueues = asyncWrapper(async (req, res) => {
-  const { departmentId } = req.body ?? {};
+  const { groupId, departmentId } = req.body ?? {};
 
-  if (!departmentId) {
+  if (!groupId && !departmentId) {
     return res.sendResponse(MESSAGES.validationError);
   }
 
-  const queues = await getQueuesService({ departmentId });
+  const queues = await getQueuesService({ groupId, departmentId });
   return res.sendResponse(MESSAGES.queuesFetched, queues);
 });
 

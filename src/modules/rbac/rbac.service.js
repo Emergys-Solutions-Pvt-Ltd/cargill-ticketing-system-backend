@@ -122,11 +122,11 @@ export const changeDepartmentAdminService = async ({ oldAdminId, newAdminId, dep
 };
 
 /**
- * Returns all active queues in a department.
- * @param {{ departmentId: number }} params
+ * Returns active queues assigned to a group or, when no group is supplied, a department.
+ * @param {{ groupId?: number, departmentId?: number }} params
  */
-export const getQueuesService = async ({ departmentId }) => {
-  return getQueuesModel({ departmentId });
+export const getQueuesService = async ({ groupId, departmentId }) => {
+  return getQueuesModel({ groupId, departmentId });
 };
 
 /**

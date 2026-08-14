@@ -362,14 +362,33 @@ export const changeDepartmentAdminModel = async ({ oldAdminId, newAdminId, depar
 };
 
 /**
- * Fetches all active queues in a department.
+ * Fetches active queues assigned to a group or, when no group is supplied,
+ * all active queues in a department.
  *
- * @param {{ departmentId: number }} params
+ * @param {{ groupId?: number, departmentId?: number }} params
  * @returns {Promise<{ queueId: number, queueName: string }[]>}
  */
-export const getQueuesModel = async ({ departmentId }) => {
+export const getQueuesModel = async ({ groupId, departmentId }) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
+
+  if (groupId) {
+    const result = await pool.query(
+      `SELECT q.queue_id   AS "queueId",
+              q.queue_name AS "queueName"
+       FROM   ${rbacSchema}.group_queue gq
+       JOIN   ${rbacSchema}.groups g
+              ON g.group_id = gq.group_id
+             AND g.is_active = TRUE
+       JOIN   ${rbacSchema}.queue q
+              ON q.queue_id = gq.queue_id
+       WHERE  gq.group_id = $1
+       ORDER  BY q.queue_name`,
+      [groupId]
+    );
+
+    return result.rows;
+  }
 
   const result = await pool.query(
     `SELECT queue_id   AS "queueId",

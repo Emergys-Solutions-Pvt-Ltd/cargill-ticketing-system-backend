@@ -72,7 +72,8 @@ router.post("/change-department-admin",
 
 /**
  * POST /api/v1/rbac/get-queues
- * Body: { departmentId: number }
+ * Body: { groupId?: number, departmentId?: number }
+ * groupId takes precedence; otherwise departmentId is required.
  */
 router.post("/get-queues",
     // authenticateJwt,
