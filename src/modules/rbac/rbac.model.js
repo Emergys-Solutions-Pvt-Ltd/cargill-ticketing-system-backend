@@ -362,45 +362,25 @@ export const changeDepartmentAdminModel = async ({ oldAdminId, newAdminId, depar
 };
 
 /**
- * Fetches queues by userId OR departmentId.
- * userId      → queues assigned to that user via user_queue
- * departmentId → all active queues in that department
+ * Fetches all active queues in a department.
  *
- * @param {{ userId?: number, departmentId?: number }} params
+ * @param {{ departmentId: number }} params
  * @returns {Promise<{ queueId: number, queueName: string }[]>}
  */
-export const getQueuesModel = async ({ userId, departmentId }) => {
+export const getQueuesModel = async ({ departmentId }) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
 
-  if (userId) {
-    const result = await pool.query(
-      `SELECT q.queue_id   AS "queueId",
-              q.queue_name AS "queueName"
-       FROM   ${rbacSchema}.user_queue uq
-       JOIN   ${rbacSchema}.queue      q  ON q.queue_id = uq.queue_id
-       WHERE  uq.user_id = $1
-         AND  q.is_active = TRUE
-       ORDER  BY q.queue_name`,
-      [userId]
-    );
-    return result.rows;
-  }
+  const result = await pool.query(
+    `SELECT queue_id   AS "queueId",
+            queue_name AS "queueName"
+     FROM   ${rbacSchema}.queue
+     WHERE  department_id = $1
+     ORDER  BY queue_name`,
+    [departmentId]
+  );
 
-  if (departmentId) {
-    const result = await pool.query(
-      `SELECT queue_id   AS "queueId",
-              queue_name AS "queueName"
-       FROM   ${rbacSchema}.queue
-       WHERE  department_id = $1
-         AND  is_active     = TRUE
-       ORDER  BY queue_name`,
-      [departmentId]
-    );
-    return result.rows;
-  }
-
-  return [];
+  return result.rows;
 };
 
 /**

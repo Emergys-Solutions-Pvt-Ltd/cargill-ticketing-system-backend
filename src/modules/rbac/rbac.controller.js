@@ -66,7 +66,7 @@ export const addUser = asyncWrapper(async (req, res) => {
 export const toggleUserStatus = asyncWrapper(async (req, res) => {
   const { userId, isActive } = req.body ?? {};
 
-  const updatedBy = req.user?.email;
+  const updatedBy = req.user?.email || 1;
 
   const result = await toggleUserStatusService({ userId, isActive, updatedBy });
 
@@ -96,12 +96,17 @@ export const changeDeptAdmin = asyncWrapper(async (req, res) => {
 
 /**
  * POST /api/v1/rbac/get-queues
- * Body: { userId } → queues assigned to user
- *       { departmentId } → all active queues in dept
+ * Body: { departmentId: number }
+ * Returns all active queues in the selected department.
  */
 export const getQueues = asyncWrapper(async (req, res) => {
-  const { userId, departmentId } = req.body ?? {};
-  const queues = await getQueuesService({ userId, departmentId });
+  const { departmentId } = req.body ?? {};
+
+  if (!departmentId) {
+    return res.sendResponse(MESSAGES.validationError);
+  }
+
+  const queues = await getQueuesService({ departmentId });
   return res.sendResponse(MESSAGES.queuesFetched, queues);
 });
 

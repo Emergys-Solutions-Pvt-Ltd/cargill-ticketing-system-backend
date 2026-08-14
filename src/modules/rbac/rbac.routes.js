@@ -72,7 +72,7 @@ router.post("/change-department-admin",
 
 /**
  * POST /api/v1/rbac/get-queues
- * Body: { userId? } or { departmentId? }
+ * Body: { departmentId: number }
  */
 router.post("/get-queues",
     // authenticateJwt,

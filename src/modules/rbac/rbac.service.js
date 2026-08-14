@@ -122,11 +122,11 @@ export const changeDepartmentAdminService = async ({ oldAdminId, newAdminId, dep
 };
 
 /**
- * Returns queues by userId (assigned) or departmentId (all in dept).
- * @param {{ userId?: number, departmentId?: number }} params
+ * Returns all active queues in a department.
+ * @param {{ departmentId: number }} params
  */
-export const getQueuesService = async ({ userId, departmentId }) => {
-  return getQueuesModel({ userId, departmentId });
+export const getQueuesService = async ({ departmentId }) => {
+  return getQueuesModel({ departmentId });
 };
 
 /**
