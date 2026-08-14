@@ -1,4 +1,4 @@
-import { getDepartmentStatsService, getDepartmentUsersService, addUserService, toggleUserStatusService, changeDepartmentAdminService, getQueuesService, removeQueueService, assignQueuesService, getUsersOverviewService, getDepartmentSupervisorsService, getGroupsService, addGroupService } from "./rbac.service.js";
+import { getDepartmentStatsService, getDepartmentUsersService, addUserService, toggleUserStatusService, changeDepartmentAdminService, getQueuesService, removeQueueService, assignQueuesService, getUsersOverviewService, getDepartmentSupervisorsService, getGroupsService, addGroupService, assignQueuesToGroupService } from "./rbac.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
 import asyncWrapper from "../../utils/asyncWrapper.js";
 
@@ -117,17 +117,6 @@ export const removeQueue = asyncWrapper(async (req, res) => {
   return res.sendResponse(MESSAGES.queueRemoved);
 });
 
-/**
- * POST /api/v1/rbac/assign-queues
- * Body: { userId: number, queueIds: number[] }
- * Bulk-inserts via jsonb_to_recordset. Skips duplicates.
- */
-export const assignQueues = asyncWrapper(async (req, res) => {
-  const { userId, queueIds = [] } = req.body ?? {};
-  const createdBy = req.user?.email;
-  const inserted = await assignQueuesService({ userId, queueIds, createdBy });
-  return res.sendResponse(MESSAGES.queuesAssigned, { inserted });
-});
 
 /**
  * POST /api/v1/rbac/get-users
@@ -174,7 +163,6 @@ export const getGroups = asyncWrapper(async (req, res) => {
  * Body: { groupName, groupDescription?, departmentId, assignedQueueIds? }
  */
 export const addGroup = asyncWrapper(async (req, res) => {
-  console.log("hello")
   const {
     groupName,
     groupDescription,
@@ -201,5 +189,26 @@ export const addGroup = asyncWrapper(async (req, res) => {
   if (result?.error === "INVALID_QUEUES") return res.sendResponse(MESSAGES.invalidQueues);
 
   return res.sendResponse(MESSAGES.groupAdded, { groupId: result.groupId });
+});
+
+/**
+ * POST /api/v1/rbac/add-queues-to-group
+ * Body: { groupId: number, queueIds: number[] }
+ */
+export const addQueuesToGroup = asyncWrapper(async (req, res) => {
+  const { groupId, queueIds = [] } = req.body ?? {};
+
+  if (!groupId || !Array.isArray(queueIds) || queueIds.length === 0) {
+    return res.sendResponse(MESSAGES.validationError);
+  }
+
+  const createdBy = req.user?.userId || 1;
+
+  const result = await assignQueuesToGroupService({ groupId, queueIds, createdBy });
+
+  if (result?.error === "GROUP_NOT_FOUND") return res.sendResponse(MESSAGES.groupNotFound);
+  if (result?.error === "INVALID_QUEUES") return res.sendResponse(MESSAGES.invalidQueues);
+
+  return res.sendResponse(MESSAGES.queuesAddedToGroup, { inserted: result.inserted });
 });
 

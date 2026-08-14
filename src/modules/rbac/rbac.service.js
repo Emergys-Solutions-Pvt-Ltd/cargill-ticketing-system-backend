@@ -1,4 +1,4 @@
-import { getDepartmentStatsModel, getDepartmentUsersModel, addUserModel, toggleUserStatusModel, changeDepartmentAdminModel, getQueuesModel, removeUserQueueModel, assignQueuesModel, getUsersOverviewModel, getDepartmentSupervisorsModel, getGroupsModel, addGroupModel } from "./rbac.model.js";
+import { getDepartmentStatsModel, getDepartmentUsersModel, addUserModel, toggleUserStatusModel, changeDepartmentAdminModel, getQueuesModel, removeUserQueueModel, assignQueuesModel, getUsersOverviewModel, getDepartmentSupervisorsModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel } from "./rbac.model.js";
 import { getConfig } from "../../config/env.config.js";
 
 /**
@@ -138,14 +138,6 @@ export const removeQueueService = async ({ userId, queueId }) => {
   return removeUserQueueModel({ userId, queueId });
 };
 
-/**
- * Bulk-assigns array of queue IDs to a user. Skips duplicates.
- * Returns count of newly inserted rows.
- * @param {{ userId: number, queueIds: number[], createdBy: string }} params
- */
-export const assignQueuesService = async ({ userId, queueIds, createdBy }) => {
-  return assignQueuesModel({ userId, queueIds, createdBy });
-};
 
 /**
  * Returns paginated users for the overview table.
@@ -251,6 +243,22 @@ export const addGroupService = async ({ groupName, groupDescription, departmentI
     groupDescription,
     departmentId,
     assignedQueueIds: uniqueQueueIds,
+    createdBy,
+  });
+};
+
+/**
+ * Assigns queues to an existing group. Skips already-assigned queues.
+ *
+ * @param {{ groupId: number, queueIds: number[], createdBy: number }} data
+ * @returns {Promise<{ inserted: number } | { error: string }>}
+ */
+export const assignQueuesToGroupService = async ({ groupId, queueIds, createdBy }) => {
+  const uniqueQueueIds = [...new Set(queueIds)];
+
+  return assignQueuesToGroupModel({
+    groupId,
+    queueIds: uniqueQueueIds,
     createdBy,
   });
 };

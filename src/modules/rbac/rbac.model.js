@@ -424,29 +424,6 @@ export const removeUserQueueModel = async ({ userId, queueId }) => {
   return result.rowCount > 0;
 };
 
-/**
- * Bulk-assigns queues to a user via jsonb_to_recordset — single INSERT, no loop.
- * Skips duplicates with ON CONFLICT DO NOTHING.
- *
- * @param {{ userId: number, queueIds: number[], createdBy: string }} params
- * @returns {Promise<number>} rowCount — number of rows actually inserted
- */
-export const assignQueuesModel = async ({ userId, queueIds, createdBy }) => {
-  const pool = getPool();
-  const { rbacSchema } = getConfig();
-
-  const queuesJson = JSON.stringify(queueIds.map((id) => ({ queue_id: id })));
-
-  const result = await pool.query(
-    `INSERT INTO ${rbacSchema}.user_queue (user_id, queue_id, created_by, created_at)
-     SELECT $1, q.queue_id, $2, CURRENT_TIMESTAMP
-     FROM   jsonb_to_recordset($3::jsonb) AS q(queue_id BIGINT)
-     ON CONFLICT (user_id, queue_id) DO NOTHING`,
-    [userId, createdBy, queuesJson]
-  );
-
-  return result.rowCount;
-};
 
 /**
  * Fetches paginated users for the overview table.
@@ -717,4 +694,52 @@ export const addGroupModel = async ({ groupName, groupDescription, departmentId,
   } finally {
     client.release();
   }
+};
+
+/**
+ * Assigns queues to an existing group via group_queue.
+ * Validates group existence and queue-department match.
+ *
+ * @param {{ groupId: number, queueIds: number[], createdBy: number }} params
+ * @returns {Promise<{ inserted: number } | { error: string }>}
+ */
+export const assignQueuesToGroupModel = async ({ groupId, queueIds, createdBy }) => {
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+
+  const groupResult = await pool.query(
+    `SELECT group_id, department_id
+     FROM ${rbacSchema}.groups
+     WHERE group_id = $1 AND is_active = TRUE
+     LIMIT 1`,
+    [groupId]
+  );
+  if (!groupResult.rows[0]) {
+    return { error: "GROUP_NOT_FOUND" };
+  }
+
+  const { department_id: departmentId } = groupResult.rows[0];
+
+  const queueCheck = await pool.query(
+    `SELECT queue_id
+     FROM ${rbacSchema}.queue
+     WHERE queue_id = ANY($1::bigint[])
+       AND department_id = $2`,
+    [queueIds, departmentId]
+  );
+  if (queueCheck.rows.length !== queueIds.length) {
+    return { error: "INVALID_QUEUES" };
+  }
+
+  const queuesJson = JSON.stringify(queueIds.map((id) => ({ queue_id: id })));
+
+  const result = await pool.query(
+    `INSERT INTO ${rbacSchema}.group_queue (group_id, queue_id, created_by, created_at)
+     SELECT $1, q.queue_id, $2, CURRENT_TIMESTAMP
+     FROM jsonb_to_recordset($3::jsonb) AS q(queue_id BIGINT)
+     ON CONFLICT (group_id, queue_id) DO NOTHING`,
+    [groupId, createdBy, queuesJson]
+  );
+
+  return { inserted: result.rowCount };
 };

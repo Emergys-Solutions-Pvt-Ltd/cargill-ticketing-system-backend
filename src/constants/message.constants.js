@@ -144,4 +144,14 @@ export const MESSAGES = {
     statusCode: 422,
     messageText: "One or more queues are invalid or do not belong to the selected department.",
   },
+  groupNotFound: {
+    statusFlag: false,
+    statusCode: 404,
+    messageText: "Group not found.",
+  },
+  queuesAddedToGroup: {
+    statusFlag: true,
+    statusCode: 200,
+    messageText: "Queues added to group successfully.",
+  },
 };
