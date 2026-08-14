@@ -744,7 +744,7 @@ export const assignQueuesToGroupModel = async ({ groupId, queueIds, createdBy })
 };
 
 /**
- * Adds group assignments for a user through user_group.
+ * Adds group assignments for a user and their direct superuser through user_group.
  * Validates that all groups are active and belong to the user's department.
  * Existing assignments are not duplicated.
  *
@@ -760,7 +760,7 @@ export const assignGroupsToUserModel = async ({ userId, groupIds, assignedBy }) 
     await client.query("BEGIN");
 
     const userResult = await client.query(
-      `SELECT user_id, department_id
+      `SELECT user_id, department_id, reports_to_user_id
        FROM ${rbacSchema}.app_user
        WHERE user_id = $1
          AND is_active = TRUE
@@ -786,12 +786,18 @@ export const assignGroupsToUserModel = async ({ userId, groupIds, assignedBy }) 
       return { error: "INVALID_GROUPS" };
     }
 
+    const targetUserIds = [user.user_id];
+    if (user.reports_to_user_id) {
+      targetUserIds.push(user.reports_to_user_id);
+    }
+
     const result = await client.query(
       `INSERT INTO ${rbacSchema}.user_group (user_id, group_id, assigned_by, assigned_at)
-       SELECT $1, selected.group_id, $2, CURRENT_TIMESTAMP
-       FROM unnest($3::bigint[]) AS selected(group_id)
+       SELECT target.user_id, selected.group_id, $1, CURRENT_TIMESTAMP
+       FROM unnest($2::bigint[]) AS target(user_id)
+       CROSS JOIN unnest($3::bigint[]) AS selected(group_id)
        ON CONFLICT (user_id, group_id) DO NOTHING`,
-      [userId, assignedBy, groupIds]
+      [assignedBy, targetUserIds, groupIds]
     );
 
     await client.query("COMMIT");
