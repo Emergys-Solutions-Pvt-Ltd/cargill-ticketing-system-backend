@@ -169,4 +169,29 @@ export const MESSAGES = {
     statusCode: 200,
     messageText: "Groups assigned to user successfully.",
   },
+  userUpdated: {
+    statusFlag: true,
+    statusCode: 200,
+    messageText: "User updated successfully.",
+  },
+  groupDetailsFetched: {
+    statusFlag: true,
+    statusCode: 200,
+    messageText: "Group details fetched successfully.",
+  },
+  queuesRemovedFromGroup: {
+    statusFlag: true,
+    statusCode: 200,
+    messageText: "Queues removed from group successfully.",
+  },
+  groupUpdated: {
+    statusFlag: true,
+    statusCode: 200,
+    messageText: "Group updated successfully.",
+  },
+  userDetailsFetched: {
+    statusFlag: true,
+    statusCode: 200,
+    messageText: "User details fetched successfully.",
+  },
 };

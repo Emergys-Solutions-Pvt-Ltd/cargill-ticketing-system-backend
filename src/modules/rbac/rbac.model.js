@@ -423,7 +423,6 @@ export const removeUserQueueModel = async ({ userId, queueId }) => {
   return result.rowCount > 0;
 };
 
-
 /**
  * Fetches paginated users for the overview table.
  * GLOBAL_ADMIN (department_id = NULL) is excluded via INNER JOIN on department.
@@ -453,8 +452,9 @@ export const getUsersOverviewModel = async ({ limit, offset, departmentId }) => 
         u.last_login_at      AS "lastLogin",
         u.reports_to_user_id AS "reportsToUserId",
 
-        -- Count UNIQUE groups assigned to this user
-        -- and all users directly reporting to this user
+        -- SUPERUSER: own groups + reporting users' groups (DISTINCT)
+        -- USER:       own groups only
+        -- Role-gated so a demoted SUPERUSER loses inherited groups immediately.
         (
           SELECT COUNT(DISTINCT ug.group_id)
           FROM ${rbacSchema}.user_group ug
@@ -462,7 +462,10 @@ export const getUsersOverviewModel = async ({ limit, offset, departmentId }) => 
             ON assigned_user.user_id = ug.user_id
           WHERE
             assigned_user.user_id = u.user_id
-            OR assigned_user.reports_to_user_id = u.user_id
+            OR (
+              r.role_code = 'SUPERUSER'
+              AND assigned_user.reports_to_user_id = u.user_id
+            )
         ) AS "groupsAssigned"
 
       FROM ${rbacSchema}.app_user u
@@ -808,4 +811,357 @@ export const assignGroupsToUserModel = async ({ userId, groupIds, assignedBy }) 
   } finally {
     client.release();
   }
+};
+
+/**
+ * Partially updates a user record.
+ * Only fields present (not undefined) in the payload are updated.
+ *
+ * Editable fields: userName, roleCode, phoneNo, reportsToUserId, workLocation.
+ * NOT editable:    email, departmentId (UI greys them out).
+ *
+ * Role change (SUPERUSER ↔ USER):
+ *   - Only role_id changes.
+ *   - reports_to_user_id is left intact (per spec — hierarchy independent of role).
+ *   - People reporting TO this user are NOT reassigned (per spec).
+ *   - Groups are NOT touched.
+ *
+ * @param {{ userId: number, userName?, roleCode?, phoneNo?, reportsToUserId?, workLocation?, updatedBy: number }} params
+ * @returns {Promise<{ userId: number } | { error: string }>}
+ */
+export const editUserModel = async ({ userId, userName, roleCode, phoneNo, reportsToUserId, workLocation, updatedBy }) => {
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    // 1. Verify user exists
+    const userCheck = await client.query(
+      `SELECT user_id FROM ${rbacSchema}.app_user WHERE user_id = $1 LIMIT 1`,
+      [userId]
+    );
+    if (!userCheck.rows[0]) {
+      await client.query("ROLLBACK");
+      return { error: "USER_NOT_FOUND" };
+    }
+
+    // 2. Resolve role_id if roleCode is being changed
+    let roleId;
+    if (roleCode !== undefined) {
+      const roleResult = await client.query(
+        `SELECT role_id FROM ${rbacSchema}.role WHERE role_code = $1 LIMIT 1`,
+        [roleCode]
+      );
+      if (!roleResult.rows[0]) {
+        await client.query("ROLLBACK");
+        return { error: "INVALID_ROLE" };
+      }
+      roleId = roleResult.rows[0].role_id;
+    }
+
+    // 3. Build dynamic SET clause — only include fields that were actually sent
+    const setClauses = [];
+    const params = [];
+    let idx = 1;
+
+    if (userName !== undefined) {
+      setClauses.push(`user_name = $${idx++}`);
+      params.push(userName.trim());
+    }
+    if (roleId !== undefined) {
+      setClauses.push(`role_id = $${idx++}`);
+      params.push(roleId);
+    }
+    if (phoneNo !== undefined) {
+      setClauses.push(`phone_no = $${idx++}`);
+      params.push(phoneNo);
+    }
+    if (reportsToUserId !== undefined) {
+      setClauses.push(`reports_to_user_id = $${idx++}`);
+      params.push(reportsToUserId);
+    }
+    if (workLocation !== undefined) {
+      setClauses.push(`work_location = $${idx++}`);
+      params.push(workLocation);
+    }
+
+    if (setClauses.length === 0) {
+      await client.query("ROLLBACK");
+      return { error: "NO_CHANGES" };
+    }
+
+    // Always stamp audit fields
+    setClauses.push(`updated_by = $${idx++}`);
+    params.push(updatedBy);
+    setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
+
+    // 4. Execute update
+    params.push(userId);
+    const result = await client.query(
+      `UPDATE ${rbacSchema}.app_user
+       SET    ${setClauses.join(", ")}
+       WHERE  user_id = $${idx}
+       RETURNING user_id AS "userId"`,
+      params
+    );
+
+    await client.query("COMMIT");
+    return { userId: result.rows[0].userId };
+
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Fetches details for one or more groups by ID array.
+ *
+ * Returns flat rows: one row per (group, queue) pair.
+ * If group has no queues, returns one row with NULL queue fields.
+ * Service reshapes into nested { group + queues[] }.
+ *
+ * totalAssignedUsers = direct user_group assignments ONLY (no inheritance).
+ *
+ * @param {{ groupIds: number[] }} params
+ * @returns {Promise<object[]>}
+ */
+export const getGroupDetailsModel = async ({ groupIds }) => {
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+
+  const result = await pool.query(
+    `SELECT
+       g.group_id                              AS "groupId",
+       g.group_name                            AS "groupName",
+       g.group_description                     AS "groupDescription",
+
+       -- Direct assignments only — no inheritance
+       COUNT(DISTINCT ug.user_id)              AS "totalAssignedUsers",
+
+       q.queue_id                              AS "queueId",
+       q.queue_name                            AS "queueName"
+
+     FROM   ${rbacSchema}.groups g
+
+     -- Direct user assignments (no role-based inheritance here)
+     LEFT JOIN ${rbacSchema}.user_group  ug ON ug.group_id  = g.group_id
+
+     -- Queues in this group
+     LEFT JOIN ${rbacSchema}.group_queue gq ON gq.group_id  = g.group_id
+     LEFT JOIN ${rbacSchema}.queue       q  ON q.queue_id   = gq.queue_id
+
+     WHERE  g.group_id  = ANY($1::bigint[])
+       AND  g.is_active = TRUE
+
+     GROUP BY
+       g.group_id,
+       g.group_name,
+       g.group_description,
+       q.queue_id,
+       q.queue_name
+
+     ORDER BY g.group_name, q.queue_name`,
+    [groupIds]
+  );
+
+  return result.rows;
+};
+
+/**
+ * Hard-deletes queue assignments from a group.
+ * Validates group exists before deleting.
+ *
+ * @param {{ groupId: number, queueIds: number[] }} params
+ * @returns {Promise<{ deleted: number } | { error: string }>}
+ */
+export const removeQueuesFromGroupModel = async ({ groupId, queueIds }) => {
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+
+  // Validate group exists
+  const groupCheck = await pool.query(
+    `SELECT group_id FROM ${rbacSchema}.groups WHERE group_id = $1 AND is_active = TRUE LIMIT 1`,
+    [groupId]
+  );
+  if (!groupCheck.rows[0]) {
+    return { error: "GROUP_NOT_FOUND" };
+  }
+
+  const result = await pool.query(
+    `DELETE FROM ${rbacSchema}.group_queue
+     WHERE  group_id  = $1
+       AND  queue_id  = ANY($2::bigint[])`,
+    [groupId, queueIds]
+  );
+
+  return { deleted: result.rowCount };
+};
+
+/**
+ * Partially updates a group record.
+ * Only fields present in the payload are updated.
+ * Editable fields: groupName, groupDescription.
+ *
+ * @param {{ groupId: number, groupName?: string, groupDescription?: string, updatedBy: number }} params
+ * @returns {Promise<{ groupId: number } | { error: string }>}
+ */
+export const editGroupModel = async ({ groupId, groupName, groupDescription, updatedBy }) => {
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    // 1. Verify group exists
+    const groupCheck = await client.query(
+      `SELECT group_id FROM ${rbacSchema}.groups WHERE group_id = $1 AND is_active = TRUE LIMIT 1`,
+      [groupId]
+    );
+    if (!groupCheck.rows[0]) {
+      await client.query("ROLLBACK");
+      return { error: "GROUP_NOT_FOUND" };
+    }
+
+    // 2. Validate group name uniqueness if groupName is provided
+    if (groupName !== undefined) {
+      const nameCheck = await client.query(
+        `SELECT group_id FROM ${rbacSchema}.groups WHERE group_name = $1 AND group_id != $2 LIMIT 1`,
+        [groupName.trim(), groupId]
+      );
+      if (nameCheck.rows[0]) {
+        await client.query("ROLLBACK");
+        return { error: "GROUP_NAME_EXISTS" };
+      }
+    }
+
+    // 3. Build dynamic SET clause
+    const setClauses = [];
+    const params = [];
+    let idx = 1;
+
+    if (groupName !== undefined) {
+      setClauses.push(`group_name = $${idx++}`);
+      params.push(groupName.trim());
+    }
+    if (groupDescription !== undefined) {
+      setClauses.push(`group_description = $${idx++}`);
+      params.push(groupDescription);
+    }
+
+    if (setClauses.length === 0) {
+      await client.query("ROLLBACK");
+      return { error: "NO_CHANGES" };
+    }
+
+    // Audit fields
+    setClauses.push(`updated_by = $${idx++}`);
+    params.push(updatedBy);
+    setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
+
+    // 4. Execute update
+    params.push(groupId);
+    const result = await client.query(
+      `UPDATE ${rbacSchema}.groups
+       SET    ${setClauses.join(", ")}
+       WHERE  group_id = $${idx}
+       RETURNING group_id AS "groupId"`,
+      params
+    );
+
+    await client.query("COMMIT");
+    return { groupId: result.rows[0].groupId };
+
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Fetches detailed profile of a single user (Super User view).
+ * Returns:
+ * 1. userInfo: profile details
+ * 2. inheritedGroups: direct groups + inherited groups (if SUPERUSER) with queue counts
+ * 3. directReports: users who report to this user
+ *
+ * @param {number} userId
+ * @returns {Promise<object | null>}
+ */
+export const getUserDetailsModel = async (userId) => {
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+
+  // 1. User Info
+  const userQuery = `
+    SELECT
+      u.user_id AS "userId", u.user_name AS "userName", u.email, u.phone_no AS "phoneNo",
+      u.work_location AS "workLocation", u.created_at AS "createdAt", u.is_active AS "isActive",
+      r.role_code AS "roleCode", r.role_name AS "roleName",
+      d.department_name AS "departmentName"
+    FROM ${rbacSchema}.app_user u
+    JOIN ${rbacSchema}.role r ON r.role_id = u.role_id
+    JOIN ${rbacSchema}.department d ON d.department_id = u.department_id
+    WHERE u.user_id = $1
+  `;
+  const userRes = await pool.query(userQuery, [userId]);
+  if (!userRes.rows[0]) return null;
+
+  const userInfo = userRes.rows[0];
+
+  // 2. Groups (Direct + Inherited if SUPERUSER)
+  const groupsQuery = `
+    WITH user_groups AS (
+      -- Direct groups
+      SELECT group_id FROM ${rbacSchema}.user_group WHERE user_id = $1
+      UNION
+      -- Inherited groups (only if user is SUPERUSER)
+      SELECT ug.group_id
+      FROM ${rbacSchema}.user_group ug
+      JOIN ${rbacSchema}.app_user sub ON sub.user_id = ug.user_id
+      JOIN ${rbacSchema}.app_user u ON u.user_id = $1
+      JOIN ${rbacSchema}.role r ON r.role_id = u.role_id
+      WHERE sub.reports_to_user_id = $1
+        AND r.role_code = 'SUPERUSER'
+    )
+    SELECT
+      g.group_id AS "groupId",
+      g.group_name AS "groupName",
+      COUNT(DISTINCT gq.queue_id) AS "queuesCount"
+    FROM user_groups ug
+    JOIN ${rbacSchema}.groups g ON g.group_id = ug.group_id
+    LEFT JOIN ${rbacSchema}.group_queue gq ON gq.group_id = g.group_id
+    WHERE g.is_active = TRUE
+    GROUP BY g.group_id, g.group_name
+    ORDER BY g.group_name
+  `;
+  const groupsRes = await pool.query(groupsQuery, [userId]);
+
+  // 3. Direct Reports
+  const reportsQuery = `
+    SELECT
+      u.user_id AS "userId",
+      u.user_name AS "userName",
+      u.email,
+      r.role_name AS "roleName"
+    FROM ${rbacSchema}.app_user u
+    JOIN ${rbacSchema}.role r ON r.role_id = u.role_id
+    WHERE u.reports_to_user_id = $1
+      AND u.is_active = TRUE
+    ORDER BY u.user_name
+  `;
+  const reportsRes = await pool.query(reportsQuery, [userId]);
+
+  return {
+    userInfo,
+    inheritedGroups: groupsRes.rows.map(g => ({ ...g, queuesCount: Number(g.queuesCount) })),
+    directReports: reportsRes.rows
+  };
 };

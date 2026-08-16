@@ -1,4 +1,4 @@
-import { getDepartmentStatsModel, getDepartmentUsersModel, addUserModel, toggleUserStatusModel, changeDepartmentAdminModel, getQueuesModel, removeUserQueueModel, getUsersOverviewModel, getDepartmentSupervisorsModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel, assignGroupsToUserModel } from "./rbac.model.js";
+import { getDepartmentStatsModel, getDepartmentUsersModel, addUserModel, toggleUserStatusModel, getQueuesModel, getUsersOverviewModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel, assignGroupsToUserModel, editUserModel, getGroupDetailsModel, removeQueuesFromGroupModel, editGroupModel, getUserDetailsModel } from "./rbac.model.js";
 import { getConfig } from "../../config/env.config.js";
 
 /**
@@ -111,32 +111,13 @@ export const toggleUserStatusService = async ({ userId, isActive, updatedBy }) =
 };
 
 /**
- * Changes department admin.
- * oldAdminId optional — if dept had no prior admin, pass null/undefined.
- *
- * @param {{ oldAdminId?: number, newAdminId: number, departmentId: number, updatedBy: string }} params
- * @returns {Promise<{ newAdminId: number, oldAdminId?: number } | { error: string }>}
- */
-export const changeDepartmentAdminService = async ({ oldAdminId, newAdminId, departmentId, updatedBy }) => {
-  return changeDepartmentAdminModel({ oldAdminId, newAdminId, departmentId, updatedBy });
-};
-
-/**
- * Returns active queues assigned to a group or, when no group is supplied, a department.
+ * Returns queues assigned to a group or, when no group is supplied, a department.
  * @param {{ groupId?: number, departmentId?: number }} params
  */
 export const getQueuesService = async ({ groupId, departmentId }) => {
   return getQueuesModel({ groupId, departmentId });
 };
 
-/**
- * Removes single user_queue row.
- * Returns true if deleted, false if not found.
- * @param {{ userId: number, queueId: number }} params
- */
-export const removeQueueService = async ({ userId, queueId }) => {
-  return removeUserQueueModel({ userId, queueId });
-};
 
 
 /**
@@ -170,38 +151,6 @@ export const getUsersOverviewService = async ({ page = 1, pageSize = 10, departm
   return { total, page, pageSize, users };
 };
 
-/**
- * Returns all active departments with their supervisors.
- * HR app_type: no SUPERVISOR role in DB → supervisors array empty naturally.
- * GENERIC: supervisors listed per department.
- *
- * @returns {Promise<object[]>}
- */
-export const getDepartmentSupervisorsService = async () => {
-  const rows = await getDepartmentSupervisorsModel();
-
-  // Group flat rows into { departmentId, departmentName, supervisors: [] }
-  const deptMap = new Map();
-
-  rows.forEach((row) => {
-    if (!deptMap.has(row.departmentId)) {
-      deptMap.set(row.departmentId, {
-        departmentId: row.departmentId,
-        departmentName: row.departmentName,
-        supervisors: [],
-      });
-    }
-
-    if (row.supervisorId !== null) {
-      deptMap.get(row.departmentId).supervisors.push({
-        userId: row.supervisorId,
-        userName: row.supervisorName,
-      });
-    }
-  });
-
-  return Array.from(deptMap.values());
-};
 
 /**
  * Returns paginated groups for the Groups overview table.
@@ -279,3 +228,78 @@ export const assignGroupsToUserService = async ({ userId, groupIds, assignedBy }
   });
 };
 
+/**
+ * Partially updates a user.
+ * Only fields present in payload are updated — undefined = skip.
+ * Role change: only role_id updates. Hierarchy (reports_to) and groups unchanged.
+ *
+ * @param {{ userId: number, userName?, roleCode?, phoneNo?, reportsToUserId?, workLocation?, updatedBy: number }} data
+ * @returns {Promise<{ userId: number } | { error: string }>}
+ */
+export const editUserService = async ({ userId, userName, roleCode, phoneNo, reportsToUserId, workLocation, updatedBy }) => {
+  return editUserModel({ userId, userName, roleCode, phoneNo, reportsToUserId, workLocation, updatedBy });
+};
+
+/**
+ * Returns full details for an array of groups:
+ *   groupId, groupName, groupDescription, totalAssignedUsers (direct only),
+ *   queues: [{ queueId, queueName }]
+ *
+ * @param {{ groupIds: number[] }} params
+ * @returns {Promise<object[]>}
+ */
+export const getGroupDetailsService = async ({ groupIds }) => {
+  const rows = await getGroupDetailsModel({ groupIds });
+
+  // Reshape flat (group × queue) rows into nested { group + queues[] }
+  const groupMap = new Map();
+
+  rows.forEach((row) => {
+    if (!groupMap.has(row.groupId)) {
+      groupMap.set(row.groupId, {
+        groupId:            row.groupId,
+        groupName:          row.groupName,
+        groupDescription:   row.groupDescription ?? null,
+        totalAssignedUsers: Number(row.totalAssignedUsers),
+        queues:             [],
+      });
+    }
+
+    if (row.queueId !== null) {
+      groupMap.get(row.groupId).queues.push({
+        queueId:   row.queueId,
+        queueName: row.queueName,
+      });
+    }
+  });
+
+  return Array.from(groupMap.values());
+};
+
+/**
+ * Hard-deletes queue assignments from a group.
+ * @param {{ groupId: number, queueIds: number[] }} params
+ * @returns {Promise<{ deleted: number } | { error: string }>}
+ */
+export const removeQueuesFromGroupService = async ({ groupId, queueIds }) => {
+  const uniqueQueueIds = [...new Set(queueIds)];
+  return removeQueuesFromGroupModel({ groupId, queueIds: uniqueQueueIds });
+};
+
+/**
+ * Edits group name and description.
+ *
+ * @param {{ groupId: number, groupName?: string, groupDescription?: string, updatedBy: number }} params
+ * @returns {Promise<{ groupId: number } | { error: string }>}
+ */
+export const editGroupService = async ({ groupId, groupName, groupDescription, updatedBy }) => {
+  return editGroupModel({ groupId, groupName, groupDescription, updatedBy });
+};
+
+/**
+ * Gets full details for a single user including profile, inherited groups, and direct reports.
+ * @param {number} userId
+ */
+export const getUserDetailsService = async (userId) => {
+  return getUserDetailsModel(userId);
+};

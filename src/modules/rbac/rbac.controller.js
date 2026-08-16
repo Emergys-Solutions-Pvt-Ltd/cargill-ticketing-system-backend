@@ -1,4 +1,4 @@
-import { getDepartmentStatsService, getDepartmentUsersService, addUserService, toggleUserStatusService, changeDepartmentAdminService, getQueuesService, removeQueueService, getUsersOverviewService, getDepartmentSupervisorsService, getGroupsService, addGroupService, assignQueuesToGroupService, assignGroupsToUserService } from "./rbac.service.js";
+import { getDepartmentStatsService, getDepartmentUsersService, addUserService, toggleUserStatusService, getQueuesService, getUsersOverviewService, getGroupsService, addGroupService, assignQueuesToGroupService, assignGroupsToUserService, editUserService, getGroupDetailsService, removeQueuesFromGroupService, editGroupService, getUserDetailsService } from "./rbac.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
 import asyncWrapper from "../../utils/asyncWrapper.js";
 
@@ -75,54 +75,19 @@ export const toggleUserStatus = asyncWrapper(async (req, res) => {
   return res.sendResponse(MESSAGES.userStatusUpdated, result);
 });
 
-/**
- * POST /api/v1/rbac/change-department-admin
- * Body: { oldAdminId: number, newAdminId: number, departmentId: number }
- * oldAdminId optional — if dept currently has no admin.
- * Promotes newAdminId, demotes oldAdminId to USER, rewires supervisor reports_to.
- */
-export const changeDeptAdmin = asyncWrapper(async (req, res) => {
-  const { oldAdminId, newAdminId, departmentId } = req.body ?? {};
-
-  const updatedBy = req.user?.email;
-
-  const result = await changeDepartmentAdminService({ oldAdminId, newAdminId, departmentId, updatedBy });
-
-  if (result?.error === "NEW_ADMIN_NOT_FOUND") return res.sendResponse(MESSAGES.newAdminNotFound);
-  if (result?.error === "OLD_ADMIN_NOT_FOUND") return res.sendResponse(MESSAGES.oldAdminNotFound);
-
-  return res.sendResponse(MESSAGES.adminChanged, result);
-});
 
 /**
  * POST /api/v1/rbac/get-queues
  * Body: { groupId?: number, departmentId?: number }
- * groupId takes precedence and returns queues assigned to that group.
- * Otherwise, returns all active queues in the selected department.
+ * groupId takes precedence — returns queues in that group.
+ * Otherwise, returns all queues in the department.
  */
 export const getQueues = asyncWrapper(async (req, res) => {
   const { groupId, departmentId } = req.body ?? {};
 
-  if (!groupId && !departmentId) {
-    return res.sendResponse(MESSAGES.validationError);
-  }
-
   const queues = await getQueuesService({ groupId, departmentId });
   return res.sendResponse(MESSAGES.queuesFetched, queues);
 });
-
-/**
- * POST /api/v1/rbac/remove-queue
- * Body: { userId: number, queueId: number }
- * Deletes single user_queue row.
- */
-export const removeQueue = asyncWrapper(async (req, res) => {
-  const { userId, queueId } = req.body ?? {};
-  const deleted = await removeQueueService({ userId, queueId });
-  if (!deleted) return res.sendResponse(MESSAGES.notFound);
-  return res.sendResponse(MESSAGES.queueRemoved);
-});
-
 
 /**
  * POST /api/v1/rbac/get-users
@@ -139,15 +104,6 @@ export const getUsers = asyncWrapper(async (req, res) => {
   return res.sendResponse(MESSAGES.usersFetched, result);
 });
 
-/**
- * GET /api/v1/rbac/get-department-supervisors
- * No body. Returns all departments with nested supervisors array.
- * GENERIC: supervisors populated. HR: supervisors = [] (no role in DB).
- */
-export const getDepartmentSupervisors = asyncWrapper(async (req, res) => {
-  const departments = await getDepartmentSupervisorsService();
-  return res.sendResponse(MESSAGES.departmentSupervisorsFetched, departments);
-});
 
 /**
  * POST /api/v1/rbac/get-groups
@@ -176,10 +132,6 @@ export const addGroup = asyncWrapper(async (req, res) => {
     assignedQueueIds = [],
   } = req.body ?? {};
 
-  if (!groupName?.trim() || !departmentId) {
-    return res.sendResponse(MESSAGES.validationError);
-  }
-
   const createdBy = req.user?.userId || 1;
 
   const result = await addGroupService({
@@ -204,10 +156,6 @@ export const addGroup = asyncWrapper(async (req, res) => {
 export const addQueuesToGroup = asyncWrapper(async (req, res) => {
   const { groupId, queueIds = [] } = req.body ?? {};
 
-  if (!groupId || !Array.isArray(queueIds) || queueIds.length === 0) {
-    return res.sendResponse(MESSAGES.validationError);
-  }
-
   const createdBy = req.user?.userId || 1;
 
   const result = await assignQueuesToGroupService({ groupId, queueIds, createdBy });
@@ -226,10 +174,6 @@ export const addQueuesToGroup = asyncWrapper(async (req, res) => {
 export const assignGroupsToUser = asyncWrapper(async (req, res) => {
   const { userId, groupIds = [] } = req.body ?? {};
 
-  if (!userId || !Array.isArray(groupIds) || groupIds.length === 0) {
-    return res.sendResponse(MESSAGES.validationError);
-  }
-
   const assignedBy = req.user?.userId || 1;
   const result = await assignGroupsToUserService({ userId, groupIds, assignedBy });
 
@@ -239,3 +183,114 @@ export const assignGroupsToUser = asyncWrapper(async (req, res) => {
   return res.sendResponse(MESSAGES.groupsAssignedToUser, { inserted: result.inserted });
 });
 
+/**
+ * POST /api/v1/rbac/edit-user
+ * Body (all optional except userId):
+ *   userId         : number  (required)
+ *   userName       : string
+ *   roleCode       : string  — "USER" | "SUPERUSER"
+ *   phoneNo        : string
+ *   reportsToUserId: number  — who this user reports to
+ *   workLocation   : string
+ * Only fields present in the body are updated.
+ * Role change: ONLY role_id changes — hierarchy and groups untouched.
+ */
+export const editUser = asyncWrapper(async (req, res) => {
+  const {
+    userId,
+    userName,
+    roleCode,
+    phoneNo,
+    reportsToUserId,
+    workLocation,
+  } = req.body ?? {};
+
+  const updatedBy = req.user?.userId || 1;
+
+  const result = await editUserService({
+    userId,
+    userName,
+    roleCode,
+    phoneNo,
+    reportsToUserId,
+    workLocation,
+    updatedBy,
+  });
+
+  if (result?.error === "USER_NOT_FOUND") return res.sendResponse(MESSAGES.userNotFound);
+  if (result?.error === "INVALID_ROLE")   return res.sendResponse(MESSAGES.validationError);
+  if (result?.error === "NO_CHANGES")     return res.sendResponse(MESSAGES.validationError);
+
+  return res.sendResponse(MESSAGES.userUpdated, { userId: result.userId });
+});
+
+/**
+ * POST /api/v1/rbac/get-group-details
+ * Body: { groupIds: number[] }  — array of group IDs.
+ * Returns per group: groupId, groupName, groupDescription,
+ *   totalAssignedUsers (direct only), queues: [{ queueId, queueName }]
+ */
+export const getGroupDetails = asyncWrapper(async (req, res) => {
+  const { groupIds } = req.body ?? {};
+
+  const result = await getGroupDetailsService({ groupIds });
+  return res.sendResponse(MESSAGES.groupDetailsFetched, result);
+});
+
+/**
+ * POST /api/v1/rbac/remove-queues-from-group
+ * Body: { groupId: number, queueIds: number[] }
+ * Hard-deletes queue assignments from the given group.
+ */
+export const removeQueuesFromGroup = asyncWrapper(async (req, res) => {
+  const { groupId, queueIds } = req.body ?? {};
+
+  const result = await removeQueuesFromGroupService({ groupId, queueIds });
+
+  if (result?.error === "GROUP_NOT_FOUND") {
+    return res.sendResponse(MESSAGES.groupNotFound);
+  }
+
+  return res.sendResponse(MESSAGES.queuesRemovedFromGroup, { deleted: result.deleted });
+});
+
+/**
+ * POST /api/v1/rbac/edit-group
+ * Body: { groupId: number, groupName?: string, groupDescription?: string }
+ * Edits group name and description.
+ */
+export const editGroup = asyncWrapper(async (req, res) => {
+  const { groupId, groupName, groupDescription } = req.body ?? {};
+
+  const updatedBy = req.user?.userId || 1;
+
+  const result = await editGroupService({
+    groupId,
+    groupName,
+    groupDescription,
+    updatedBy,
+  });
+
+  if (result?.error === "GROUP_NOT_FOUND") return res.sendResponse(MESSAGES.groupNotFound);
+  if (result?.error === "GROUP_NAME_EXISTS") return res.sendResponse(MESSAGES.groupAlreadyExists);
+  if (result?.error === "NO_CHANGES") return res.sendResponse(MESSAGES.validationError);
+
+  return res.sendResponse(MESSAGES.groupUpdated, { groupId: result.groupId });
+});
+
+/**
+ * POST /api/v1/rbac/get-user-details
+ * Body: { userId: number }
+ * Returns profile info, inherited groups with queues count, and direct reports.
+ */
+export const getUserDetails = asyncWrapper(async (req, res) => {
+  const { userId } = req.body ?? {};
+
+  const result = await getUserDetailsService(userId);
+
+  if (!result) {
+    return res.sendResponse(MESSAGES.userNotFound);
+  }
+
+  return res.sendResponse(MESSAGES.userDetailsFetched, result);
+});

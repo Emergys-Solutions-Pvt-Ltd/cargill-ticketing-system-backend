@@ -1,6 +1,13 @@
 import express from "express";
-import { getDepartments, getDepartmentUsers, addUser, toggleUserStatus, changeDeptAdmin, getQueues, removeQueue, getUsers, getDepartmentSupervisors, getGroups, addGroup, addQueuesToGroup, assignGroupsToUser } from "./rbac.controller.js";
+import { getDepartments, getDepartmentUsers, addUser, toggleUserStatus, getQueues, getUsers, getGroups, addGroup, addQueuesToGroup, assignGroupsToUser, editUser, getGroupDetails, removeQueuesFromGroup, editGroup, getUserDetails } from "./rbac.controller.js";
 import { authenticateJwt } from "../../middlewares/auth.middleware.js";
+import { validate } from "../../middlewares/validate.middleware.js";
+import {
+  getDepartmentsSchema, getDepartmentUsersSchema, addUserSchema, toggleUserStatusSchema,
+  getQueuesSchema, getUsersSchema, getGroupsSchema, paginationQuerySchema, addGroupSchema,
+  addQueuesToGroupSchema, assignGroupsToUserSchema, editUserSchema, getGroupDetailsSchema,
+  removeQueuesFromGroupSchema, editGroupSchema, getUserDetailsSchema
+} from "./rbac.validation.js";
 
 const router = express.Router();
 
@@ -16,6 +23,7 @@ const router = express.Router();
  */
 router.post("/add-group",
     // authenticateJwt,
+    validate(addGroupSchema),
     addGroup);
 
 /**
@@ -26,6 +34,7 @@ router.post("/add-group",
  */
 router.post("/get-departments",
     //  authenticateJwt,
+    validate(getDepartmentsSchema),
     getDepartments);
 
 /**
@@ -35,6 +44,7 @@ router.post("/get-departments",
  */
 router.post("/get-department-users",
     // authenticateJwt,
+    validate(getDepartmentUsersSchema),
     getDepartmentUsers);
 
 /**
@@ -52,6 +62,7 @@ router.post("/get-department-users",
  */
 router.post("/add-user",
     // authenticateJwt,
+    validate(addUserSchema),
     addUser);
 
 /**
@@ -60,15 +71,8 @@ router.post("/add-user",
  */
 router.post("/toggle-user-status",
     // authenticateJwt,
+    validate(toggleUserStatusSchema),
     toggleUserStatus);
-
-/**
- * POST /api/v1/rbac/change-department-admin
- * Protected. Body: { oldAdminId?: number, newAdminId: number, departmentId: number }
- */
-router.post("/change-department-admin",
-    // authenticateJwt,
-    changeDeptAdmin);
 
 /**
  * POST /api/v1/rbac/get-queues
@@ -77,15 +81,8 @@ router.post("/change-department-admin",
  */
 router.post("/get-queues",
     // authenticateJwt,
+    validate(getQueuesSchema),
     getQueues);
-
-/**
- * POST /api/v1/rbac/remove-queue
- * Body: { userId: number, queueId: number }
- */
-router.post("/remove-queue",
-    // authenticateJwt,
-    removeQueue);
 
 /**
  * POST /api/v1/rbac/get-users
@@ -95,15 +92,9 @@ router.post("/remove-queue",
  */
 router.post("/get-users",
     // authenticateJwt,
+    validate(paginationQuerySchema, "query"),
+    validate(getUsersSchema),
     getUsers);
-
-/**
- * GET /api/v1/rbac/get-department-supervisors
- * No body. All depts with supervisors. GENERIC: populated. HR: empty array.
- */
-router.get("/get-department-supervisors",
-    // authenticateJwt,
-    getDepartmentSupervisors);
 
 /**
  * POST /api/v1/rbac/get-groups
@@ -112,6 +103,8 @@ router.get("/get-department-supervisors",
  */
 router.post("/get-groups",
     // authenticateJwt,
+    validate(paginationQuerySchema, "query"),
+    validate(getGroupsSchema),
     getGroups);
 
 /**
@@ -124,6 +117,7 @@ router.post("/get-groups",
  */
 router.post("/add-queues-to-group",
     // authenticateJwt,
+    validate(addQueuesToGroupSchema),
     addQueuesToGroup);
 
 /**
@@ -132,6 +126,54 @@ router.post("/add-queues-to-group",
  */
 router.post("/assign-group-to-user",
     // authenticateJwt,
+    validate(assignGroupsToUserSchema),
     assignGroupsToUser);
+
+/**
+ * POST /api/v1/rbac/edit-user
+ * Body: { userId (required), userName?, roleCode?, phoneNo?, reportsToUserId?, workLocation? }
+ * Partial update — only provided fields are changed.
+ */
+router.post("/edit-user",
+    // authenticateJwt,
+    validate(editUserSchema),
+    editUser);
+
+/**
+ * POST /api/v1/rbac/get-group-details
+ * Body: { groupIds: number[] }
+ * Returns full group details with queues and direct user count.
+ */
+router.post("/get-group-details",
+    // authenticateJwt,
+    validate(getGroupDetailsSchema),
+    getGroupDetails);
+
+/**
+ * POST /api/v1/rbac/remove-queues-from-group
+ * Body: { groupId: number, queueIds: number[] }
+ */
+router.post("/remove-queues-from-group",
+    // authenticateJwt,
+    validate(removeQueuesFromGroupSchema),
+    removeQueuesFromGroup);
+
+/**
+ * POST /api/v1/rbac/edit-group
+ * Body: { groupId: number, groupName?: string, groupDescription?: string }
+ */
+router.post("/edit-group",
+    // authenticateJwt,
+    validate(editGroupSchema),
+    editGroup);
+
+/**
+ * POST /api/v1/rbac/get-user-details
+ * Body: { userId: number }
+ */
+router.post("/get-user-details",
+    // authenticateJwt,
+    validate(getUserDetailsSchema),
+    getUserDetails);
 
 export default router;
