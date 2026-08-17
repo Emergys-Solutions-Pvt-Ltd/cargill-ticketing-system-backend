@@ -1,9 +1,9 @@
 import express from "express";
-import { getDepartments, getDepartmentUsers, addUser, toggleUserStatus, getQueues, getUsers, getGroups, addGroup, addQueuesToGroup, assignGroupsToUser, editUser, getGroupDetails, removeQueuesFromGroup, editGroup, getUserDetails } from "./rbac.controller.js";
+import { getDepartments, addUser, toggleUserStatus, getQueues, getUsers, getGroups, addGroup, addQueuesToGroup, assignGroupsToUser, editUser, getGroupDetails, removeQueuesFromGroup, editGroup, getUserDetails } from "./rbac.controller.js";
 import { authenticateJwt } from "../../middlewares/auth.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import {
-  getDepartmentsSchema, getDepartmentUsersSchema, addUserSchema, toggleUserStatusSchema,
+  getDepartmentsSchema, addUserSchema, toggleUserStatusSchema,
   getQueuesSchema, getUsersSchema, getGroupsSchema, addGroupSchema,
   addQueuesToGroupSchema, assignGroupsToUserSchema, editUserSchema, getGroupDetailsSchema,
   removeQueuesFromGroupSchema, editGroupSchema, getUserDetailsSchema
@@ -37,15 +37,15 @@ router.post("/get-departments",
     validate(getDepartmentsSchema),
     getDepartments);
 
-/**
- * POST /api/v1/rbac/get-users
- * Protected. Body: { userId?, departmentId? }
- * All optional — no body = all users.
- */
-router.post("/get-department-users",
-    // authenticateJwt,
-    validate(getDepartmentUsersSchema),
-    getDepartmentUsers);
+// /**
+//  * POST /api/v1/rbac/get-users
+//  * Protected. Body: { userId?, departmentId? }
+//  * All optional — no body = all users.
+//  */
+// router.post("/get-department-users",
+//     // authenticateJwt,
+//     validate(getDepartmentUsersSchema),
+//     getDepartmentUsers);
 
 /**
  * POST /api/v1/rbac/add-user

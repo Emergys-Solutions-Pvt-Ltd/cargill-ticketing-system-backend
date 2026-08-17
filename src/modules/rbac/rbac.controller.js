@@ -1,4 +1,4 @@
-import { getDepartmentStatsService, getDepartmentUsersService, addUserService, toggleUserStatusService, getQueuesService, getUsersOverviewService, getGroupsService, addGroupService, assignQueuesToGroupService, assignGroupsToUserService, editUserService, getGroupDetailsService, removeQueuesFromGroupService, editGroupService, getUserDetailsService } from "./rbac.service.js";
+import { getDepartmentStatsService, addUserService, toggleUserStatusService, getQueuesService, getUsersOverviewService, getGroupsService, addGroupService, assignQueuesToGroupService, assignGroupsToUserService, editUserService, getGroupDetailsService, removeQueuesFromGroupService, editGroupService, getUserDetailsService } from "./rbac.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
 import asyncWrapper from "../../utils/asyncWrapper.js";
 
@@ -22,11 +22,11 @@ export const getDepartments = asyncWrapper(async (req, res) => {
  *   departmentId — filter to one department's users
  * No body = all users
  */
-export const getDepartmentUsers = asyncWrapper(async (req, res) => {
-  const { userId, departmentId } = req.body ?? {};
-  const users = await getDepartmentUsersService({ userId, departmentId });
-  return res.sendResponse(MESSAGES.usersFetched, users);
-});
+// export const getDepartmentUsers = asyncWrapper(async (req, res) => {
+//   const { userId, departmentId } = req.body ?? {};
+//   const users = await getDepartmentUsersService({ userId, departmentId });
+//   return res.sendResponse(MESSAGES.usersFetched, users);
+// });
 
 /**
  * POST /api/v1/rbac/add-user

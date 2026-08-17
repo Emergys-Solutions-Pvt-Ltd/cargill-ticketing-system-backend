@@ -1,4 +1,4 @@
-import { getDepartmentStatsModel, getDepartmentUsersModel, addUserModel, toggleUserStatusModel, getQueuesModel, getUsersOverviewModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel, assignGroupsToUserModel, editUserModel, getGroupDetailsModel, removeQueuesFromGroupModel, editGroupModel, getUserDetailsModel } from "./rbac.model.js";
+import { getDepartmentStatsModel, addUserModel, toggleUserStatusModel, getQueuesModel, getUsersOverviewModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel, assignGroupsToUserModel, editUserModel, getGroupDetailsModel, removeQueuesFromGroupModel, editGroupModel, getUserDetailsModel } from "./rbac.model.js";
 import { getConfig } from "../../config/env.config.js";
 
 /**
@@ -31,61 +31,61 @@ export const getDepartmentStatsService = async (departmentId = null) => {
  * @param {{ userId?: number, departmentId?: number }} filters
  * @returns {Promise<object[]>}
  */
-export const getDepartmentUsersService = async (filters = {}) => {
-  const rows = await getDepartmentUsersModel(filters);
+// export const getDepartmentUsersService = async (filters = {}) => {
+//   const rows = await getDepartmentUsersModel(filters);
 
-  return rows.map((u) => {
-    switch (u.roleCode) {
+//   return rows.map((u) => {
+//     switch (u.roleCode) {
 
-      case "DEPARTMENT_ADMIN":
-        return {
-          userId: u.userId,
-          userName: u.userName,
-          phone: u.phone ?? null,
-          email: u.email,
-          workLocation: u.workLocation ?? null,
-          createdAt: u.createdAt ?? null,
-          supervisorsUnder: Number(u.supervisorsUnder),
-          usersUnder: Number(u.usersUnder),
-          queuesUnder: Number(u.queuesUnder),
-          roleCode: u.roleCode,
-          roleName: u.roleName,
-          departmentId: u.departmentId,
-          departmentName: u.departmentName,
-        };
+//       case "DEPARTMENT_ADMIN":
+//         return {
+//           userId: u.userId,
+//           userName: u.userName,
+//           phone: u.phone ?? null,
+//           email: u.email,
+//           workLocation: u.workLocation ?? null,
+//           createdAt: u.createdAt ?? null,
+//           supervisorsUnder: Number(u.supervisorsUnder),
+//           usersUnder: Number(u.usersUnder),
+//           queuesUnder: Number(u.queuesUnder),
+//           roleCode: u.roleCode,
+//           roleName: u.roleName,
+//           departmentId: u.departmentId,
+//           departmentName: u.departmentName,
+//         };
 
-      case "SUPERVISOR":
-        return {
-          userId: u.userId,
-          userName: u.userName,
-          email: u.email,
-          usersAssigned: Number(u.usersAssigned),
-          queuesManaged: Number(u.queuesManaged),
-          isActive: u.isActive,
-          lastLogin: u.lastLogin ?? null,
-          roleCode: u.roleCode,
-          roleName: u.roleName,
-          departmentId: u.departmentId,
-          departmentName: u.departmentName,
-        };
+//       case "SUPERVISOR":
+//         return {
+//           userId: u.userId,
+//           userName: u.userName,
+//           email: u.email,
+//           usersAssigned: Number(u.usersAssigned),
+//           queuesManaged: Number(u.queuesManaged),
+//           isActive: u.isActive,
+//           lastLogin: u.lastLogin ?? null,
+//           roleCode: u.roleCode,
+//           roleName: u.roleName,
+//           departmentId: u.departmentId,
+//           departmentName: u.departmentName,
+//         };
 
-      default: // USER
-        return {
-          userId: u.userId,
-          userName: u.userName,
-          email: u.email,
-          roleCode: u.roleCode,
-          roleName: u.roleName,
-          supervisorName: u.supervisorName ?? null,
-          queuesAssigned: Number(u.queuesAssigned),
-          isActive: u.isActive,
-          lastLogin: u.lastLogin ?? null,
-          departmentId: u.departmentId,
-          departmentName: u.departmentName,
-        };
-    }
-  });
-};
+//       default: // USER
+//         return {
+//           userId: u.userId,
+//           userName: u.userName,
+//           email: u.email,
+//           roleCode: u.roleCode,
+//           roleName: u.roleName,
+//           supervisorName: u.supervisorName ?? null,
+//           queuesAssigned: Number(u.queuesAssigned),
+//           isActive: u.isActive,
+//           lastLogin: u.lastLogin ?? null,
+//           departmentId: u.departmentId,
+//           departmentName: u.departmentName,
+//         };
+//     }
+//   });
+// };
 
 /**
  * Inserts a new user. Validates email uniqueness.

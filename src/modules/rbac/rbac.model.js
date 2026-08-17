@@ -64,117 +64,117 @@ export const getDepartmentStatsModel = async (departmentId = null) => {
  * @param {{ userId?: number, departmentId?: number }} filters
  * @returns {Promise<object[]>}
  */
-export const getDepartmentUsersModel = async ({ userId, departmentId } = {}) => {
-  const pool = getPool();
-  const { rbacSchema } = getConfig();
+// export const getDepartmentUsersModel = async ({ userId, departmentId } = {}) => {
+//   const pool = getPool();
+//   const { rbacSchema } = getConfig();
 
-  const conditions = ["1=1"];
-  const params = [];
-  let idx = 1;
+//   const conditions = ["1=1"];
+//   const params = [];
+//   let idx = 1;
 
-  if (userId) {
-    conditions.push(`u.user_id = $${idx++}`);
-    params.push(userId);
-  }
+//   if (userId) {
+//     conditions.push(`u.user_id = $${idx++}`);
+//     params.push(userId);
+//   }
 
-  if (departmentId) {
-    conditions.push(`u.department_id = $${idx++}`);
-    params.push(departmentId);
-  }
+//   if (departmentId) {
+//     conditions.push(`u.department_id = $${idx++}`);
+//     params.push(departmentId);
+//   }
 
-  const whereClause = conditions.join(" AND ");
+//   const whereClause = conditions.join(" AND ");
 
-  const query = `
-    SELECT
-      -- Common fields
-      u.user_id                                    AS "userId",
-      u.user_name                                  AS "userName",
-      u.email,
-      r.role_code                                  AS "roleCode",
-      r.role_name                                  AS "roleName",
-      d.department_id                              AS "departmentId",
-      d.department_name                            AS "departmentName",
-      u.is_active                                  AS "isActive",
-      u.last_login_at                              AS "lastLogin",
+//   const query = `
+//     SELECT
+//       -- Common fields
+//       u.user_id                                    AS "userId",
+//       u.user_name                                  AS "userName",
+//       u.email,
+//       r.role_code                                  AS "roleCode",
+//       r.role_name                                  AS "roleName",
+//       d.department_id                              AS "departmentId",
+//       d.department_name                            AS "departmentName",
+//       u.is_active                                  AS "isActive",
+//       u.last_login_at                              AS "lastLogin",
 
-      -- DEPARTMENT_ADMIN specific
-      u.phone_no                                   AS phone,
-      u.work_location                              AS "workLocation",
-      u.created_at                                 AS "createdAt",
+//       -- DEPARTMENT_ADMIN specific
+//       u.phone_no                                   AS phone,
+//       u.work_location                              AS "workLocation",
+//       u.created_at                                 AS "createdAt",
 
-      -- Supervisors directly under this user (DEPT_ADMIN)
-      (
-        SELECT COUNT(*)
-        FROM ${rbacSchema}.app_user sub
-        INNER JOIN ${rbacSchema}.role sr ON sr.role_id = sub.role_id
-        WHERE sub.reports_to_user_id = u.user_id
-          AND sr.role_code = 'SUPERVISOR'
-          AND sub.is_active = TRUE
-      ) AS "supervisorsUnder",
+//       -- Supervisors directly under this user (DEPT_ADMIN)
+//       (
+//         SELECT COUNT(*)
+//         FROM ${rbacSchema}.app_user sub
+//         INNER JOIN ${rbacSchema}.role sr ON sr.role_id = sub.role_id
+//         WHERE sub.reports_to_user_id = u.user_id
+//           AND sr.role_code = 'SUPERVISOR'
+//           AND sub.is_active = TRUE
+//       ) AS "supervisorsUnder",
 
-      -- All active users (role=USER) in same department (DEPT_ADMIN)
-      (
-        SELECT COUNT(*)
-        FROM ${rbacSchema}.app_user sub
-        INNER JOIN ${rbacSchema}.role sr ON sr.role_id = sub.role_id
-        WHERE sub.department_id = u.department_id
-          AND sr.role_code = 'USER'
-          AND sub.is_active = TRUE
-      ) AS "usersUnder",
+//       -- All active users (role=USER) in same department (DEPT_ADMIN)
+//       (
+//         SELECT COUNT(*)
+//         FROM ${rbacSchema}.app_user sub
+//         INNER JOIN ${rbacSchema}.role sr ON sr.role_id = sub.role_id
+//         WHERE sub.department_id = u.department_id
+//           AND sr.role_code = 'USER'
+//           AND sub.is_active = TRUE
+//       ) AS "usersUnder",
 
-      -- All queues in this department (DEPT_ADMIN)
-      (
-        SELECT COUNT(*)
-        FROM ${rbacSchema}.queue q
-        WHERE q.department_id = u.department_id
-          AND q.is_active = TRUE
-      ) AS "queuesUnder",
+//       -- All queues in this department (DEPT_ADMIN)
+//       (
+//         SELECT COUNT(*)
+//         FROM ${rbacSchema}.queue q
+//         WHERE q.department_id = u.department_id
+//           AND q.is_active = TRUE
+//       ) AS "queuesUnder",
 
-      -- SUPERVISOR specific: direct report user count
-      (
-        SELECT COUNT(*)
-        FROM ${rbacSchema}.app_user sub
-        WHERE sub.reports_to_user_id = u.user_id
-          AND sub.is_active = TRUE
-      ) AS "usersAssigned",
+//       -- SUPERVISOR specific: direct report user count
+//       (
+//         SELECT COUNT(*)
+//         FROM ${rbacSchema}.app_user sub
+//         WHERE sub.reports_to_user_id = u.user_id
+//           AND sub.is_active = TRUE
+//       ) AS "usersAssigned",
 
-      -- SUPERVISOR specific: distinct queues from direct reports
-      (
-        SELECT COUNT(DISTINCT subuq.queue_id)
-        FROM ${rbacSchema}.app_user sub
-        INNER JOIN ${rbacSchema}.user_queue subuq ON subuq.user_id = sub.user_id
-        WHERE sub.reports_to_user_id = u.user_id
-      ) AS "queuesManaged",
+//       -- SUPERVISOR specific: distinct queues from direct reports
+//       (
+//         SELECT COUNT(DISTINCT subuq.queue_id)
+//         FROM ${rbacSchema}.app_user sub
+//         INNER JOIN ${rbacSchema}.user_queue subuq ON subuq.user_id = sub.user_id
+//         WHERE sub.reports_to_user_id = u.user_id
+//       ) AS "queuesManaged",
 
-      -- USER specific: queues directly assigned
-      COUNT(uq.queue_id)                           AS "queuesAssigned",
+//       -- USER specific: queues directly assigned
+//       COUNT(uq.queue_id)                           AS "queuesAssigned",
 
-      -- USER specific: their supervisor name
-      (
-        SELECT sup.user_name
-        FROM ${rbacSchema}.app_user sup
-        WHERE sup.user_id = u.reports_to_user_id
-          AND sup.is_active = TRUE
-        LIMIT 1
-      ) AS "supervisorName"
+//       -- USER specific: their supervisor name
+//       (
+//         SELECT sup.user_name
+//         FROM ${rbacSchema}.app_user sup
+//         WHERE sup.user_id = u.reports_to_user_id
+//           AND sup.is_active = TRUE
+//         LIMIT 1
+//       ) AS "supervisorName"
 
-    FROM ${rbacSchema}.app_user u
-    INNER JOIN ${rbacSchema}.role r        ON r.role_id       = u.role_id
-    INNER JOIN ${rbacSchema}.department d  ON d.department_id = u.department_id
-    LEFT  JOIN ${rbacSchema}.user_queue uq ON uq.user_id      = u.user_id
-    WHERE ${whereClause}
-    GROUP BY
-      u.user_id, u.user_name, u.email,
-      r.role_code, r.role_name,
-      d.department_id, d.department_name,
-      u.is_active, u.last_login_at,
-      u.phone_no, u.work_location, u.created_at
-    ORDER BY u.user_name
-  `;
+//     FROM ${rbacSchema}.app_user u
+//     INNER JOIN ${rbacSchema}.role r        ON r.role_id       = u.role_id
+//     INNER JOIN ${rbacSchema}.department d  ON d.department_id = u.department_id
+//     LEFT  JOIN ${rbacSchema}.user_queue uq ON uq.user_id      = u.user_id
+//     WHERE ${whereClause}
+//     GROUP BY
+//       u.user_id, u.user_name, u.email,
+//       r.role_code, r.role_name,
+//       d.department_id, d.department_name,
+//       u.is_active, u.last_login_at,
+//       u.phone_no, u.work_location, u.created_at
+//     ORDER BY u.user_name
+//   `;
 
-  const result = await pool.query(query, params);
-  return result.rows;
-};
+//   const result = await pool.query(query, params);
+//   return result.rows;
+// };
 
 export const addUserModel = async ({ roleCode, userName, email, phoneNo, departmentId, reportsToUserId, assignedGroupIds = [], createdBy }) => {
   const pool = getPool();
@@ -786,18 +786,12 @@ export const assignGroupsToUserModel = async ({ userId, groupIds, assignedBy }) 
       return { error: "INVALID_GROUPS" };
     }
 
-    const targetUserIds = [user.user_id];
-    if (user.reports_to_user_id) {
-      targetUserIds.push(user.reports_to_user_id);
-    }
-
     const result = await client.query(
       `INSERT INTO ${rbacSchema}.user_group (user_id, group_id, assigned_by, assigned_at)
-       SELECT target.user_id, selected.group_id, $1, CURRENT_TIMESTAMP
-       FROM unnest($2::bigint[]) AS target(user_id)
-       CROSS JOIN unnest($3::bigint[]) AS selected(group_id)
+       SELECT $1, selected.group_id, $2, CURRENT_TIMESTAMP
+       FROM unnest($3::bigint[]) AS selected(group_id)
        ON CONFLICT (user_id, group_id) DO NOTHING`,
-      [assignedBy, targetUserIds, groupIds]
+      [user.user_id, assignedBy, groupIds]
     );
 
     await client.query("COMMIT");
