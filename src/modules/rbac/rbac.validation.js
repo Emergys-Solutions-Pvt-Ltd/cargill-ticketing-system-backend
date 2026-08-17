@@ -39,10 +39,7 @@ export const getGroupsSchema = Joi.object({
   departmentId: Joi.number().integer().positive().optional(),
 });
 
-export const paginationQuerySchema = Joi.object({
-  page: Joi.number().integer().min(1).optional(),
-  pageSize: Joi.number().integer().min(1).optional(),
-});
+
 
 export const addGroupSchema = Joi.object({
   groupName: Joi.string().trim().required(),

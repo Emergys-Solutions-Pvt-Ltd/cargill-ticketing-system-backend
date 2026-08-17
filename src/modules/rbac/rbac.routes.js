@@ -4,7 +4,7 @@ import { authenticateJwt } from "../../middlewares/auth.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import {
   getDepartmentsSchema, getDepartmentUsersSchema, addUserSchema, toggleUserStatusSchema,
-  getQueuesSchema, getUsersSchema, getGroupsSchema, paginationQuerySchema, addGroupSchema,
+  getQueuesSchema, getUsersSchema, getGroupsSchema, addGroupSchema,
   addQueuesToGroupSchema, assignGroupsToUserSchema, editUserSchema, getGroupDetailsSchema,
   removeQueuesFromGroupSchema, editGroupSchema, getUserDetailsSchema
 } from "./rbac.validation.js";
@@ -87,23 +87,19 @@ router.post("/get-queues",
 /**
  * POST /api/v1/rbac/get-users
  * Body: { departmentId? } (optional)
- * Query params: ?page=1&pageSize=10 (optional)
- * All users across all/one department, paginated.
+ * All users across all/one department.
  */
 router.post("/get-users",
     // authenticateJwt,
-    validate(paginationQuerySchema, "query"),
     validate(getUsersSchema),
     getUsers);
 
 /**
  * POST /api/v1/rbac/get-groups
  * Protected. Body: { departmentId? }
- * Query params: ?page=1&pageSize=10
  */
 router.post("/get-groups",
     // authenticateJwt,
-    validate(paginationQuerySchema, "query"),
     validate(getGroupsSchema),
     getGroups);
 

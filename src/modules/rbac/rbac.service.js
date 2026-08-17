@@ -121,19 +121,16 @@ export const getQueuesService = async ({ groupId, departmentId }) => {
 
 
 /**
- * Returns paginated users for the overview table.
+ * Returns users for the overview table.
  * Unified response shape — no role-based branching, no APP_TYPE logic.
  *
- * @param {{ page?: number, pageSize?: number, departmentId?: number }} options
- * @returns {Promise<{ total: number, page: number, pageSize: number, users: object[] }>}
+ * @param {{ departmentId?: number }} options
+ * @returns {Promise<{ total: number, users: object[] }>}
  */
-export const getUsersOverviewService = async ({ page = 1, pageSize = 10, departmentId } = {}) => {
-  const limit = pageSize;
-  const offset = (page - 1) * pageSize;
+export const getUsersOverviewService = async ({ departmentId } = {}) => {
+  const rows = await getUsersOverviewModel({ departmentId });
 
-  const rows = await getUsersOverviewModel({ limit, offset, departmentId });
-
-  const total = rows.length > 0 ? Number(rows[0].totalCount) : 0;
+  const total = rows.length;
 
   const users = rows.map((u) => ({
     userId: u.userId,
@@ -148,23 +145,20 @@ export const getUsersOverviewService = async ({ page = 1, pageSize = 10, departm
     lastLogin: u.lastLogin ?? null,
   }));
 
-  return { total, page, pageSize, users };
+  return { total, users };
 };
 
 
 /**
- * Returns paginated groups for the Groups overview table.
+ * Returns groups for the Groups overview table.
  *
- * @param {{ page?: number, pageSize?: number, departmentId?: number }} options
- * @returns {Promise<{ total: number, page: number, pageSize: number, groups: object[] }>}
+ * @param {{ departmentId?: number }} options
+ * @returns {Promise<{ total: number, groups: object[] }>}
  */
-export const getGroupsService = async ({ page = 1, pageSize = 10, departmentId } = {}) => {
-  const limit = pageSize;
-  const offset = (page - 1) * pageSize;
+export const getGroupsService = async ({ departmentId } = {}) => {
+  const rows = await getGroupsModel({ departmentId });
 
-  const rows = await getGroupsModel({ limit, offset, departmentId });
-
-  const total = rows.length > 0 ? Number(rows[0].totalCount) : 0;
+  const total = rows.length;
 
   const groups = rows.map((g) => ({
     groupId: g.groupId,
@@ -175,7 +169,7 @@ export const getGroupsService = async ({ page = 1, pageSize = 10, departmentId }
     usersAssigned: Number(g.usersAssigned)
   }));
 
-  return { total, page, pageSize, groups };
+  return { total, groups };
 };
 
 /**

@@ -55,7 +55,14 @@ export const validate = (schema, target = "body") => {
 
     // Replace req[target] with stripped + coerced value so controller
     // only ever sees clean, schema-conformant data.
-    req[target] = value;
+    // Express defines req.query as a getter-only property, so we use defineProperty.
+    Object.defineProperty(req, target, {
+      value: value,
+      writable: true,
+      enumerable: true,
+      configurable: true
+    });
+    
     next();
   };
 };

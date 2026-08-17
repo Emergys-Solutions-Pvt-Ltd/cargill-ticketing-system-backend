@@ -96,11 +96,9 @@ export const getQueues = asyncWrapper(async (req, res) => {
  * Returns paginated users from all departments or filtered by departmentId.
  */
 export const getUsers = asyncWrapper(async (req, res) => {
-  const page = parseInt(req.query.page, 10) || 1;
-  const pageSize = parseInt(req.query.pageSize, 10) || 10;
   const { departmentId } = req.body ?? {};
 
-  const result = await getUsersOverviewService({ page, pageSize, departmentId });
+  const result = await getUsersOverviewService({ departmentId });
   return res.sendResponse(MESSAGES.usersFetched, result);
 });
 
@@ -112,11 +110,9 @@ export const getUsers = asyncWrapper(async (req, res) => {
  * Returns paginated groups with counts of users and queues.
  */
 export const getGroups = asyncWrapper(async (req, res) => {
-  const page = parseInt(req.query.page, 10) || 1;
-  const pageSize = parseInt(req.query.pageSize, 10) || 10;
   const { departmentId } = req.body ?? {};
 
-  const result = await getGroupsService({ page, pageSize, departmentId });
+  const result = await getGroupsService({ departmentId });
   return res.sendResponse(MESSAGES.groupsFetched, result);
 });
 

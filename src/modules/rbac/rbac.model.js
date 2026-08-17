@@ -432,10 +432,10 @@ export const removeUserQueueModel = async ({ userId, queueId }) => {
  *   reportsToName, groupsAssigned (COUNT DISTINCT via user_group),
  *   isActive, lastLogin, totalCount (window fn — total rows before LIMIT).
  *
- * @param {{ limit: number, offset: number, departmentId?: number }} options
+ * @param {{ departmentId?: number }} options
  * @returns {Promise<object[]>}
  */
-export const getUsersOverviewModel = async ({ limit, offset, departmentId }) => {
+export const getUsersOverviewModel = async ({ departmentId }) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
 
@@ -476,7 +476,7 @@ export const getUsersOverviewModel = async ({ limit, offset, departmentId }) => 
       JOIN ${rbacSchema}.department d
         ON d.department_id = u.department_id
       
-      ${departmentId ? `WHERE u.department_id = $3` : ''}
+      ${departmentId ? `WHERE u.department_id = $1` : ''}
     )
 
     SELECT
@@ -499,11 +499,9 @@ export const getUsersOverviewModel = async ({ limit, offset, departmentId }) => 
       b."departmentName",
       b."roleCode",
       b."userName"
-
-    LIMIT $1 OFFSET $2
   `;
 
-  const params = [limit, offset];
+  const params = [];
   if (departmentId) {
     params.push(departmentId);
   }
@@ -565,10 +563,10 @@ export const getDepartmentSupervisorsModel = async () => {
  *   usersAssigned (COUNT DISTINCT via user_group),
  *   totalCount (window fn — total rows before LIMIT).
  *
- * @param {{ limit: number, offset: number, departmentId?: number }} options
+ * @param {{ departmentId?: number }} options
  * @returns {Promise<object[]>}
  */
-export const getGroupsModel = async ({ limit, offset, departmentId }) => {
+export const getGroupsModel = async ({ departmentId }) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
 
@@ -591,7 +589,7 @@ export const getGroupsModel = async ({ limit, offset, departmentId }) => {
       LEFT JOIN ${rbacSchema}.group_queue gq ON gq.group_id = g.group_id
       LEFT JOIN ${rbacSchema}.user_group ug ON ug.group_id = g.group_id
       WHERE g.is_active = TRUE
-      ${departmentId ? 'AND g.department_id = $3' : ''}
+      ${departmentId ? 'AND g.department_id = $1' : ''}
       GROUP BY
         g.group_id, g.group_name, g.group_description, d.department_name
     )
@@ -600,10 +598,9 @@ export const getGroupsModel = async ({ limit, offset, departmentId }) => {
       COUNT(*) OVER() AS "totalCount"
     FROM base b
     ORDER BY b."departmentName", b."groupName"
-    LIMIT $1 OFFSET $2
   `;
 
-  const params = [limit, offset];
+  const params = [];
   if (departmentId) {
     params.push(departmentId);
   }
