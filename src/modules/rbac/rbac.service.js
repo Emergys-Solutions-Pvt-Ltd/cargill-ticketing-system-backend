@@ -138,6 +138,7 @@ export const getUsersOverviewService = async ({ departmentId } = {}) => {
     email: u.email,
     roleCode: u.roleCode,
     roleName: u.roleName,
+    departmentId: u.departmentId,
     departmentName: u.departmentName,
     reportsToName: u.reportsToName ?? null,
     groupsAssigned: Number(u.groupsAssigned),
@@ -164,6 +165,7 @@ export const getGroupsService = async ({ departmentId } = {}) => {
     groupId: g.groupId,
     groupName: g.groupName,
     groupDescription: g.groupDescription ?? null,
+    departmentId: g.departmentId,
     departmentName: g.departmentName,
     queuesAssigned: Number(g.queuesAssigned),
     usersAssigned: Number(g.usersAssigned)

@@ -447,6 +447,7 @@ export const getUsersOverviewModel = async ({ departmentId }) => {
         u.email,
         r.role_code          AS "roleCode",
         r.role_name          AS "roleName",
+        d.department_id      AS "departmentId",
         d.department_name    AS "departmentName",
         u.is_active          AS "isActive",
         u.last_login_at      AS "lastLogin",
@@ -576,6 +577,7 @@ export const getGroupsModel = async ({ departmentId }) => {
         g.group_id                AS "groupId",
         g.group_name              AS "groupName",
         g.group_description       AS "groupDescription",
+        g.department_id           AS "departmentId",
         d.department_name         AS "departmentName",
 
         -- Count of queues assigned to this group
@@ -591,7 +593,7 @@ export const getGroupsModel = async ({ departmentId }) => {
       WHERE g.is_active = TRUE
       ${departmentId ? 'AND g.department_id = $1' : ''}
       GROUP BY
-        g.group_id, g.group_name, g.group_description, d.department_name
+        g.group_id, g.group_name, g.group_description, g.department_id, d.department_name
     )
     SELECT 
       b.*,
@@ -1096,6 +1098,7 @@ export const getUserDetailsModel = async (userId) => {
       u.user_id AS "userId", u.user_name AS "userName", u.email, u.phone_no AS "phoneNo",
       u.work_location AS "workLocation", u.created_at AS "createdAt", u.is_active AS "isActive",
       r.role_code AS "roleCode", r.role_name AS "roleName",
+      d.department_id AS "departmentId",
       d.department_name AS "departmentName"
     FROM ${rbacSchema}.app_user u
     JOIN ${rbacSchema}.role r ON r.role_id = u.role_id
