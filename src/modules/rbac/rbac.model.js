@@ -22,6 +22,7 @@ export const getDepartmentStatsModel = async (departmentId = null) => {
       d.department_id   AS "departmentId",
       d.department_code AS "departmentCode",
       d.department_name AS "departmentName",
+      d.department_desciption AS "departmentDescription",
 
       -- Active SUPERUSERs in this department
       COUNT(DISTINCT CASE
