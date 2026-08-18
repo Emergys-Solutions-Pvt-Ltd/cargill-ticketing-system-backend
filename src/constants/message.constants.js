@@ -29,6 +29,11 @@ export const MESSAGES = {
     statusCode: 200,
     messageText: "Tickets fetched successfully.",
   },
+  ticketDetailsFetched: {
+    statusFlag: true,
+    statusCode: 200,
+    messageText: "Ticket details fetched successfully.",
+  },
   filterOptionsFetched: {
     statusFlag: true,
     statusCode: 200,

@@ -1,4 +1,4 @@
-import { fetchTickets } from "./ticket.service.js";
+import { fetchTickets, fetchTicketDetails } from "./ticket.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
 import asyncWrapper from "../../utils/asyncWrapper.js";
 
@@ -14,4 +14,17 @@ export const getTickets = asyncWrapper(async (req, res) => {
   const result = await fetchTickets({ page, pageSize });
 
   return res.sendResponse(MESSAGES.ticketsFetched, result);
+});
+
+/**
+ * POST /api/v1/tickets/get-details
+ * Body: { ticketId: string }
+ */
+export const getTicketDetails = asyncWrapper(async (req, res) => {
+  const { ticketId } = req.body;
+  const ticket = await fetchTicketDetails({ ticketId });
+
+  if (!ticket) return res.sendResponse(MESSAGES.notFound);
+
+  return res.sendResponse(MESSAGES.ticketDetailsFetched, ticket);
 });
