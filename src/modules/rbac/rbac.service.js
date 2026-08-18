@@ -16,6 +16,7 @@ export const getDepartmentStatsService = async (departmentId = null) => {
     departmentId: dept.departmentId,
     departmentCode: dept.departmentCode,
     departmentName: dept.departmentName,
+    departmentDescription: dept.departmentDescription,
     superUserCount: Number(dept.superUserCount),
     userCount: Number(dept.userCount),
     groupCount: Number(dept.groupCount),
