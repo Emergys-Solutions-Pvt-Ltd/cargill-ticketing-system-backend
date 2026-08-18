@@ -1,5 +1,5 @@
 import express from "express";
-import { getTickets, getTicketDetails } from "./ticket.controller.js";
+import { getTickets, getServiceRequestFormDetails } from "./ticket.controller.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import { getTicketsSchema, getTicketDetailsSchema } from "./ticket.schema.js";
 import { authenticateJwt } from "../../middlewares/auth.middleware.js";
@@ -19,14 +19,14 @@ router.post(
 );
 
 /**
- * POST /api/v1/tickets/get-details
+ * POST /api/v1/tickets/get-service-request-form
  * Body: { ticketId: string }
  */
 router.post(
-  "/get-details",
+  "/get-service-request-form",
   authenticateJwt,
   validate(getTicketDetailsSchema),
-  getTicketDetails
+  getServiceRequestFormDetails
 );
 
 export default router;

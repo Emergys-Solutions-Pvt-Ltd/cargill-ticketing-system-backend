@@ -1,7 +1,7 @@
 import {
   queryTickets,
   countTickets,
-  queryTicketDetails,
+  queryServiceRequestFormDetails,
 } from "./ticket.model.js";
 
 /**
@@ -42,8 +42,8 @@ export const fetchTickets = async ({ page, pageSize }) => {
  * @param {{ ticketId: string }} params
  * @returns {Promise<object|null>}
  */
-export const fetchTicketDetails = async ({ ticketId }) => {
-  const result = await queryTicketDetails(ticketId);
+export const fetchServiceRequestFormDetails = async ({ ticketId }) => {
+  const result = await queryServiceRequestFormDetails(ticketId);
   const ticket = result.rows[0];
 
   if (!ticket) return null;

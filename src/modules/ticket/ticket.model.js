@@ -42,7 +42,7 @@ export const countTickets = () => {
  * @param {string} ticketId Service request number, for example SR0001234
  * @returns {Promise<pg.QueryResult>}
  */
-export const queryTicketDetails = (ticketId) => {
+export const queryServiceRequestFormDetails = (ticketId) => {
   const pool = getPool();
 
   const sql = `

@@ -445,6 +445,8 @@ export const getUsersOverviewModel = async ({ departmentId }) => {
         u.user_id            AS "userId",
         u.user_name          AS "userName",
         u.email,
+        u.phone_no           AS "phoneNo",
+        u.work_location      AS "workLocation",
         r.role_code          AS "roleCode",
         r.role_name          AS "roleName",
         d.department_id      AS "departmentId",
@@ -489,7 +491,7 @@ export const getUsersOverviewModel = async ({ departmentId }) => {
         FROM ${rbacSchema}.app_user sup
         WHERE sup.user_id = b."reportsToUserId"
         LIMIT 1
-      ) AS "reportsToName",
+      ) AS "reportsToUserName",
 
       -- Total records before pagination
       COUNT(*) OVER() AS "totalCount"
