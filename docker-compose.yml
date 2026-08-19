@@ -1,0 +1,20 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-cargill_db}
+      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID:-us-east-1_example}
+      - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID:-exampleclientid}
+      - RBAC_SCHEMA=${RBAC_SCHEMA:-public}
+      - APP_TYPE=${APP_TYPE:-ticketing}
+    restart: unless-stopped
