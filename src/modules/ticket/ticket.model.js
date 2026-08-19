@@ -11,8 +11,33 @@ export const queryTickets = (pageSize, offset) => {
   const pool = getPool();
 
   const sql = `
-    SELECT *
-    FROM gold1.test
+    SELECT
+        bmcrf_shortdescription_c AS "ticketShortDesc",
+        bmcservicedesk__incidentdescription_17_c AS "ticketDescription",
+        bmcservicedesk__incidenttype_c AS "ticketType",
+        bmcservicedesk__status_id_c AS "ticketStatus",
+        bmcrf_staff_firstname_c AS "staffName",
+        name AS "ticketId",
+        request_definition_formula_c AS "ticketFormName",
+        bmcrf_opened_date_formula_c AS "ticketOpenDate"
+    FROM gold1.bmcservicedesk__incident_c
+    WHERE bmcservicedesk__incidenttype_c IS NOT NULL
+
+    UNION ALL
+
+    SELECT
+        bmcrf_shortdescription_c AS "ticketShortDesc",
+        bmcservicedesk__incidentdescription_17_c AS "ticketDescription",
+        bmcservicedesk__incidenttype_c AS "ticketType",
+        bmcservicedesk__status_id_c AS "ticketStatus",
+        bmcrf_staff_firstname_c AS "staffName",
+        name AS "ticketId",
+        request_definition_formula_c AS "ticketFormName",
+        bmcrf_opened_date_formula_c AS "ticketOpenDate"
+    FROM gold1.bmcservicedesk_task_c
+    WHERE bmcservicedesk__incidenttype_c IS NOT NULL
+
+    ORDER BY "ticketOpenDate" DESC
     LIMIT $1 OFFSET $2
   `;
 
@@ -28,8 +53,19 @@ export const countTickets = () => {
   const pool = getPool();
 
   const sql = `
+    WITH combined AS (
+        SELECT name
+        FROM gold1.bmcservicedesk__incident_c
+        WHERE bmcservicedesk__incidenttype_c IS NOT NULL
+
+        UNION ALL
+
+        SELECT name
+        FROM gold1.bmcservicedesk_task_c
+        WHERE bmcservicedesk__incidenttype_c IS NOT NULL
+    )
     SELECT COUNT(*) AS total
-    FROM gold1.test
+    FROM combined
   `;
 
   return pool.query(sql);
