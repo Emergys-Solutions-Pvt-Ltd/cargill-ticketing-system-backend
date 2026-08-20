@@ -199,4 +199,9 @@ export const MESSAGES = {
     statusCode: 200,
     messageText: "User details fetched successfully.",
   },
+  groupsRemovedFromUser: {
+    statusFlag: true,
+    statusCode: 200,
+    messageText: "Groups removed from user successfully.",
+  },
 };

@@ -1,4 +1,4 @@
-import { getDepartmentStatsService, addUserService, toggleUserStatusService, getQueuesService, getUsersOverviewService, getGroupsService, addGroupService, assignQueuesToGroupService, assignGroupsToUserService, editUserService, getGroupDetailsService, removeQueuesFromGroupService, editGroupService, getUserDetailsService } from "./rbac.service.js";
+import { getDepartmentStatsService, addUserService, toggleUserStatusService, getQueuesService, getUsersOverviewService, getGroupsService, addGroupService, assignQueuesToGroupService, assignGroupsToUserService, removeGroupsFromUserService, editUserService, getGroupDetailsService, removeQueuesFromGroupService, editGroupService, getUserDetailsService } from "./rbac.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
 import asyncWrapper from "../../utils/asyncWrapper.js";
 
@@ -289,4 +289,21 @@ export const getUserDetails = asyncWrapper(async (req, res) => {
   }
 
   return res.sendResponse(MESSAGES.userDetailsFetched, result);
+});
+
+/**
+ * POST /api/v1/rbac/remove-groups-from-user
+ * Body: { userId: number, groupIds: number[] }
+ * Hard-deletes group assignments from the given user.
+ */
+export const removeGroupsFromUser = asyncWrapper(async (req, res) => {
+  const { userId, groupIds } = req.body ?? {};
+
+  const result = await removeGroupsFromUserService({ userId, groupIds });
+
+  if (result?.error === "USER_NOT_FOUND") {
+    return res.sendResponse(MESSAGES.userNotFound);
+  }
+
+  return res.sendResponse(MESSAGES.groupsRemovedFromUser, { deleted: result.deleted });
 });

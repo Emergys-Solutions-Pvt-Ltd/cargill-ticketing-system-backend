@@ -810,6 +810,33 @@ export const assignGroupsToUserModel = async ({ userId, groupIds, assignedBy }) 
 };
 
 /**
+ * Removes group assignments for a user.
+ * Validates user exists. Deletes matching rows from user_group.
+ *
+ * @param {{ userId: number, groupIds: number[] }} params
+ * @returns {Promise<{ deleted: number } | { error: string }>}
+ */
+export const removeGroupsFromUserModel = async ({ userId, groupIds }) => {
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+
+  const userResult = await pool.query(
+    `SELECT user_id FROM ${rbacSchema}.app_user WHERE user_id = $1 AND is_active = TRUE LIMIT 1`,
+    [userId]
+  );
+  if (!userResult.rows[0]) return { error: "USER_NOT_FOUND" };
+
+  const result = await pool.query(
+    `DELETE FROM ${rbacSchema}.user_group
+     WHERE user_id = $1
+       AND group_id = ANY($2::bigint[])`,
+    [userId, groupIds]
+  );
+
+  return { deleted: result.rowCount };
+};
+
+/**
  * Partially updates a user record.
  * Only fields present (not undefined) in the payload are updated.
  *

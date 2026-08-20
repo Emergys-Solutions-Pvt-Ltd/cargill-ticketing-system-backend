@@ -1,12 +1,12 @@
 import express from "express";
-import { getDepartments, addUser, toggleUserStatus, getQueues, getUsers, getGroups, addGroup, addQueuesToGroup, assignGroupsToUser, editUser, getGroupDetails, removeQueuesFromGroup, editGroup, getUserDetails } from "./rbac.controller.js";
+import { getDepartments, addUser, toggleUserStatus, getQueues, getUsers, getGroups, addGroup, addQueuesToGroup, assignGroupsToUser, removeGroupsFromUser, editUser, getGroupDetails, removeQueuesFromGroup, editGroup, getUserDetails } from "./rbac.controller.js";
 import { authenticateJwt } from "../../middlewares/auth.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import {
   getDepartmentsSchema, addUserSchema, toggleUserStatusSchema,
   getQueuesSchema, getUsersSchema, getGroupsSchema, addGroupSchema,
   addQueuesToGroupSchema, assignGroupsToUserSchema, editUserSchema, getGroupDetailsSchema,
-  removeQueuesFromGroupSchema, editGroupSchema, getUserDetailsSchema
+  removeQueuesFromGroupSchema, editGroupSchema, getUserDetailsSchema, removeGroupsFromUserSchema
 } from "./rbac.validation.js";
 
 const router = express.Router();
@@ -171,5 +171,14 @@ router.post("/get-user-details",
     // authenticateJwt,
     validate(getUserDetailsSchema),
     getUserDetails);
+
+/**
+ * POST /api/v1/rbac/remove-groups-from-user
+ * Body: { userId: number, groupIds: number[] }
+ */
+router.post("/remove-groups-from-user",
+    // authenticateJwt,
+    validate(removeGroupsFromUserSchema),
+    removeGroupsFromUser);
 
 export default router;

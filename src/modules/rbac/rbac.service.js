@@ -1,4 +1,4 @@
-import { getDepartmentStatsModel, addUserModel, toggleUserStatusModel, getQueuesModel, getUsersOverviewModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel, assignGroupsToUserModel, editUserModel, getGroupDetailsModel, removeQueuesFromGroupModel, editGroupModel, getUserDetailsModel } from "./rbac.model.js";
+import { getDepartmentStatsModel, addUserModel, toggleUserStatusModel, getQueuesModel, getUsersOverviewModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel, assignGroupsToUserModel, removeGroupsFromUserModel, editUserModel, getGroupDetailsModel, removeQueuesFromGroupModel, editGroupModel, getUserDetailsModel } from "./rbac.model.js";
 import { getConfig } from "../../config/env.config.js";
 
 /**
@@ -302,4 +302,12 @@ export const editGroupService = async ({ groupId, groupName, groupDescription, u
  */
 export const getUserDetailsService = async (userId) => {
   return getUserDetailsModel(userId);
+};
+
+/**
+ * Removes group assignments from a user.
+ * @param {{ userId: number, groupIds: number[] }} params
+ */
+export const removeGroupsFromUserService = async ({ userId, groupIds }) => {
+  return removeGroupsFromUserModel({ userId, groupIds });
 };

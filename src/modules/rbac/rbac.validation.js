@@ -89,3 +89,8 @@ export const editGroupSchema = Joi.object({
 export const getUserDetailsSchema = Joi.object({
   userId: Joi.number().integer().positive().required(),
 });
+
+export const removeGroupsFromUserSchema = Joi.object({
+  userId: Joi.number().integer().positive().required(),
+  groupIds: Joi.array().items(Joi.number().integer().positive()).min(1).required(),
+});
