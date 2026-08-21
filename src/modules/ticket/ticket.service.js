@@ -96,3 +96,45 @@ export const fetchServiceRequestFormDetails = async ({ ticketId }) => {
     },
   };
 };
+
+import {
+  queryActionHistory,
+  queryNotesAndAttachments,
+  queryApprovalHistory,
+  queryIncidentHistory,
+  queryLinkedTasks,
+  queryLinkedIncidents,
+} from "./ticket.details.model.js";
+
+/**
+ * Fetches all detail sections for a ticket in parallel.
+ *
+ * @param {{ ticketId: string }} params
+ * @returns {Promise<object>}
+ */
+export const fetchTicketDetails = async ({ ticketId }) => {
+  const [
+    actionHistoryResult,
+    notesAttachmentsResult,
+    approvalHistoryResult,
+    incidentHistoryResult,
+    linkedTasksResult,
+    linkedIncidentsResult,
+  ] = await Promise.all([
+    queryActionHistory(ticketId),
+    queryNotesAndAttachments(ticketId),
+    queryApprovalHistory(ticketId),
+    queryIncidentHistory(ticketId),
+    queryLinkedTasks(ticketId),
+    queryLinkedIncidents(ticketId),
+  ]);
+
+  return {
+    actionHistory:      actionHistoryResult.rows,
+    notesAndAttachments: notesAttachmentsResult.rows,
+    approvalHistory:    approvalHistoryResult.rows,
+    incidentHistory:    incidentHistoryResult.rows,
+    linkedTasks:        linkedTasksResult.rows,
+    linkedIncidents:    linkedIncidentsResult.rows,
+  };
+};

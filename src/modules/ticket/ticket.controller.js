@@ -1,4 +1,4 @@
-import { fetchTickets, fetchServiceRequestFormDetails } from "./ticket.service.js";
+import { fetchTickets, fetchTicketDetails, fetchServiceRequestFormDetails } from "./ticket.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
 import asyncWrapper from "../../utils/asyncWrapper.js";
 
@@ -14,6 +14,20 @@ export const getTickets = asyncWrapper(async (req, res) => {
   const result = await fetchTickets({ page, pageSize });
 
   return res.sendResponse(MESSAGES.ticketsFetched, result);
+});
+
+/**
+ * POST /api/v1/tickets/get-details
+ * Body: { ticketId: string }
+ * Returns all detail sections (action history, notes, approvals,
+ * incident history, linked tasks, linked incidents) in one response.
+ */
+export const getTicketDetails = asyncWrapper(async (req, res) => {
+  const { ticketId } = req.body;
+
+  const result = await fetchTicketDetails({ ticketId });
+
+  return res.sendResponse(MESSAGES.ticketDetailsFetched, result);
 });
 
 /**

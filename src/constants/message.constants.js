@@ -204,4 +204,9 @@ export const MESSAGES = {
     statusCode: 200,
     messageText: "Groups removed from user successfully.",
   },
+  ticketDetailsFetched: {
+    statusFlag: true,
+    statusCode: 200,
+    messageText: "Ticket details fetched successfully.",
+  },
 };
