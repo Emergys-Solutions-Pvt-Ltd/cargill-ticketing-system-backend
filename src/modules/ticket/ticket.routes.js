@@ -1,5 +1,11 @@
 import express from "express";
-import { getTickets, getTicketDetails, getServiceRequestFormDetails } from "./ticket.controller.js";
+import {
+  getTickets,
+  getServiceRequestFormDetails,
+  getTicketDetails,
+  getTaskFormDetails,
+  getTaskDetails,
+} from "./ticket.controller.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import { getTicketsSchema, getTicketDetailsSchema } from "./ticket.schema.js";
 import { authenticateJwt } from "../../middlewares/auth.middleware.js";
@@ -8,7 +14,6 @@ const router = express.Router();
 
 /**
  * POST /api/v1/tickets/get-data
- * Protected. Paginated ticket list.
  * Body: { page, pageSize }
  */
 router.post(
@@ -31,14 +36,38 @@ router.post(
 
 /**
  * POST /api/v1/tickets/get-details
- * Protected. Returns all detail sections for a ticket.
  * Body: { ticketId: string }
+ * Returns all accordion sections (action history, notes, approvals, etc.) for a ticket.
  */
 router.post(
   "/get-details",
   authenticateJwt,
   validate(getTicketDetailsSchema),
   getTicketDetails
+);
+
+/**
+ * POST /api/v1/tickets/get-task-form
+ * Body: { ticketId: string }
+ * Returns task form details (same shape as service request form).
+ */
+router.post(
+  "/get-task-form",
+  authenticateJwt,
+  validate(getTicketDetailsSchema),
+  getTaskFormDetails
+);
+
+/**
+ * POST /api/v1/tickets/get-task-details
+ * Body: { ticketId: string }
+ * Returns all accordion sections for a task.
+ */
+router.post(
+  "/get-task-details",
+  authenticateJwt,
+  validate(getTicketDetailsSchema),
+  getTaskDetails
 );
 
 export default router;
