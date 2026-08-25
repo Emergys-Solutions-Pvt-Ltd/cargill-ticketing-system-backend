@@ -4,6 +4,7 @@ import {
   fetchTicketDetails,
   fetchTaskFormDetails,
   fetchTaskDetails,
+  fetchSubmittedForm,
 } from "./ticket.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
 import asyncWrapper from "../../utils/asyncWrapper.js";
@@ -60,5 +61,18 @@ export const getTaskFormDetails = asyncWrapper(async (req, res) => {
 export const getTaskDetails = asyncWrapper(async (req, res) => {
   const { ticketId } = req.body;
   const result = await fetchTaskDetails({ taskId: ticketId });
+  return res.sendResponse(MESSAGES.ticketDetailsFetched, result);
+});
+
+/**
+ * POST /api/v1/tickets/get-submitted-form
+ * Body: { ticketId: string }
+ * Returns dynamically transformed submitted form rows.
+ * Rows with response === "header section" become { type: "header", title }.
+ * All other rows become { type: "field", label, value }.
+ */
+export const getSubmittedForm = asyncWrapper(async (req, res) => {
+  const { ticketId } = req.body;
+  const result = await fetchSubmittedForm({ ticketId });
   return res.sendResponse(MESSAGES.ticketDetailsFetched, result);
 });

@@ -5,6 +5,7 @@ import {
   getTicketDetails,
   getTaskFormDetails,
   getTaskDetails,
+  getSubmittedForm,
 } from "./ticket.controller.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import { getTicketsSchema, getTicketDetailsSchema } from "./ticket.schema.js";
@@ -68,6 +69,18 @@ router.post(
   authenticateJwt,
   validate(getTicketDetailsSchema),
   getTaskDetails
+);
+
+/**
+ * POST /api/v1/tickets/get-submitted-form
+ * Body: { ticketId: string }
+ * Returns dynamically structured submitted form (header + field rows).
+ */
+router.post(
+  "/get-submitted-form",
+  authenticateJwt,
+  validate(getTicketDetailsSchema),
+  getSubmittedForm
 );
 
 export default router;

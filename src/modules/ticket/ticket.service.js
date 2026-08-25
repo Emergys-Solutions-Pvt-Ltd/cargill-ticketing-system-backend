@@ -3,6 +3,7 @@ import {
   countTickets,
   queryServiceRequestFormDetails,
   queryTaskFormDetails,
+  querySubmittedForm,
 } from "./ticket.model.js";
 
 import {
@@ -200,4 +201,35 @@ export const fetchTaskDetails = async ({ taskId }) => {
     linkedTasks:         linkedTasksResult.rows,
     linkedIncidents:     linkedIncidentsResult.rows,
   };
+};
+
+/**
+ * Fetches submitted form for a service request.
+ * Transforms rows into a fully dynamic structure:
+ *   - rows where response === "header section" (case-insensitive) → { type: "header", title }
+ *   - all other rows                                               → { type: "field",  label, value }
+ * Zero hard-coded knowledge of header names — the DB drives everything.
+ *
+ * @param {{ ticketId: string }} params
+ * @returns {Promise<Array<{ type: "header"|"field", title?: string, label?: string, value?: string }>>}
+ */
+export const fetchSubmittedForm = async ({ ticketId }) => {
+  const result = await querySubmittedForm(ticketId);
+
+  return result.rows.map((row) => {
+    const normalizedResponse = String(row.response ?? "").trim().toLowerCase();
+
+    if (normalizedResponse === "header section") {
+      return {
+        type: "header",
+        title: row.input,
+      };
+    }
+
+    return {
+      type: "field",
+      label: row.input,
+      value: row.response,
+    };
+  });
 };

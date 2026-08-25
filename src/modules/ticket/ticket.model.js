@@ -188,3 +188,33 @@ export const queryTaskFormDetails = (taskId) => {
 
   return pool.query(sql, [taskId]);
 };
+
+/**
+ * Fetches submitted form inputs/responses for a service request.
+ * Returns rows ordered by lastmodifieddate.
+ *
+ * Column semantics:
+ *   bmcservicedesk__input__c    — label text (or header title when response = "header section")
+ *   bmcservicedesk__response__c — response value, OR the literal "header section"
+ *
+ * @param {string} ticketId  - Salesforce incident ID (e.g. alTUv00000HdlwXMAR)
+ * @returns {Promise<pg.QueryResult>}
+ */
+export const querySubmittedForm = (ticketId) => {
+  const pool = getPool();
+
+  const sql = `
+    SELECT
+      bmcservicedesk__input__c    AS "input",
+      bmcservicedesk__response__c AS "response"
+    FROM gold1.bmcservicedesk__srm_requestdetailinputs__c bsrc
+    WHERE bmcservicedesk__fkrequestdetail__c = (
+      SELECT id
+      FROM gold1.bmcservicedesk__srm_requestdetail__c bsrc2
+      WHERE bsrc2.bmcservicedesk__fkincident__c = $1
+    )
+    ORDER BY bsrc.lastmodifieddate
+  `;
+
+  return pool.query(sql, [ticketId]);
+};
