@@ -156,6 +156,9 @@ export const fetchFilterOptions = async (filters = {}) => {
   const toValues = (result) => result.rows.map((r) => r.value).filter(Boolean);
 
   const getDistinct = (col, incidentOnly = false) => {
+    // incident-only column requested but we are in TASK_ONLY mode — column doesn't exist in task, return empty
+    if (incidentOnly && mode === "TASK_ONLY") return Promise.resolve([]);
+
     if (incidentOnly || mode === "INCIDENT_ONLY") {
       return queryIncidentDistinct(col, inc.whereClause, inc.params).then(toValues);
     }
