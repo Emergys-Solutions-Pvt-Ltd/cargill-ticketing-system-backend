@@ -170,11 +170,11 @@ export const fetchFilterOptions = async (filters = {}) => {
   };
 
   const [queue, priority, status, employee, requestor] = await Promise.all([
-    getDistinct("bmcservicedesk__queue__c"),
-    getDistinct("bmcservicedesk__fkpriority__c"),
-    getDistinct("bmcservicedesk__fkstatus__c"),
-    getDistinct("employeename__c",      true),  // incident only
-    getDistinct("requestor_contact__c", true),  // incident only
+    getDistinct("BMCServiceDesk__Queue__c"),
+    getDistinct("BMCServiceDesk__FKPriority__c"),
+    getDistinct("bmcservicedesk__status_id__c"),
+    getDistinct("EmployeeName__c",      true),  // incident only
+    getDistinct("Requestor_Contact__c", true),  // incident only
   ]);
 
   return { queue, priority, status, employee, requestor };

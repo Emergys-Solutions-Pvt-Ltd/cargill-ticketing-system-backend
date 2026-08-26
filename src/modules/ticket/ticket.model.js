@@ -1,20 +1,16 @@
 import getPool from "../../config/db.js";
+import { getConfig } from "../../config/env.config.js";
 
 // ---------------------------------------------------------------------------
 // WHERE clause builder helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Determines which table(s) to query based on filters.
- * @returns {"INCIDENT_ONLY"|"TASK_ONLY"|"UNION"}
- */
 export const resolveTableMode = (filters = {}) => {
   const { ticketType, employee, requestor, resolveDateFrom, resolveDateTo } = filters;
 
   if (ticketType === "TASK") return "TASK_ONLY";
   if (ticketType === "SERVICE_REQUEST" || ticketType === "INCIDENT") return "INCIDENT_ONLY";
 
-  // These fields only exist in incident table — force incident only
   if (employee?.length || requestor?.length || resolveDateFrom || resolveDateTo) {
     return "INCIDENT_ONLY";
   }
@@ -22,196 +18,130 @@ export const resolveTableMode = (filters = {}) => {
   return "UNION";
 };
 
-/**
- * Builds parameterized WHERE clause for the incident table.
- * Multi-select = IN (...) = OR between values.
- *
- * @param {object} filters
- * @returns {{ whereClause: string, params: any[] }}
- */
 export const buildIncidentWhereClause = (filters = {}) => {
-  const conditions = ["bmcservicedesk__incidenttype__c IS NOT NULL"];
+  const conditions = ["1=1"];
   const params = [];
   let idx = 1;
 
-  // Ticket type narrows to sub-type within incident table
   if (filters.ticketType === "SERVICE_REQUEST") {
-    conditions.push(`bmcservicedesk__incidenttype__c = $${idx++}`);
-    params.push("Service Request");
+    conditions.push(`bmcservicedesk__isservicerequest__c = TRUE`);
   } else if (filters.ticketType === "INCIDENT") {
-    conditions.push(`bmcservicedesk__incidenttype__c = $${idx++}`);
-    params.push("Incident");
+    conditions.push(`bmcservicedesk__isservicerequest__c = FALSE`);
   }
 
-  // --- Dropdown multi-select filters (IN = OR) ---
   if (filters.queue?.length) {
     const ph = filters.queue.map(() => `$${idx++}`).join(", ");
-    conditions.push(`bmcservicedesk__queue__c IN (${ph})`);
+    conditions.push(`BMCServiceDesk__Queue__c IN (${ph})`);
     params.push(...filters.queue);
   }
-
   if (filters.priority?.length) {
     const ph = filters.priority.map(() => `$${idx++}`).join(", ");
-    conditions.push(`bmcservicedesk__fkpriority__c IN (${ph})`);
+    conditions.push(`BMCServiceDesk__FKPriority__c IN (${ph})`);
     params.push(...filters.priority);
   }
-
   if (filters.status?.length) {
     const ph = filters.status.map(() => `$${idx++}`).join(", ");
-    conditions.push(`bmcservicedesk__fkstatus__c IN (${ph})`);
+    conditions.push(`bmcservicedesk__status_id__c IN (${ph})`);
     params.push(...filters.status);
   }
-
   if (filters.employee?.length) {
     const ph = filters.employee.map(() => `$${idx++}`).join(", ");
-    conditions.push(`employeename__c IN (${ph})`);
+    conditions.push(`EmployeeName__c IN (${ph})`);
     params.push(...filters.employee);
   }
-
   if (filters.requestor?.length) {
     const ph = filters.requestor.map(() => `$${idx++}`).join(", ");
-    conditions.push(`requestor_contact__c IN (${ph})`);
+    conditions.push(`Requestor_Contact__c IN (${ph})`);
     params.push(...filters.requestor);
   }
 
-  // --- Free text filters (ILIKE) ---
-  if (filters.shortDescription) {
-    conditions.push(`bmcservicedesk__shortdescription__c ILIKE $${idx++}`);
-    params.push(`%${filters.shortDescription}%`);
-  }
+  if (filters.shortDescription) { conditions.push(`bmcrf_short_description__c ILIKE $${idx++}`); params.push(`%${filters.shortDescription}%`); }
+  if (filters.description)      { conditions.push(`bmcservicedesk__incidentdescription__c ILIKE $${idx++}`); params.push(`%${filters.description}%`); }
+  if (filters.resolution)       { conditions.push(`BMCServiceDesk__incidentResolution__c ILIKE $${idx++}`); params.push(`%${filters.resolution}%`); }
 
-  if (filters.description) {
-    conditions.push(`bmcservicedesk__incidentdescription__c ILIKE $${idx++}`);
-    params.push(`%${filters.description}%`);
-  }
-
-  if (filters.resolution) {
-    conditions.push(`bmcservicedesk__incidentresolution__c ILIKE $${idx++}`);
-    params.push(`%${filters.resolution}%`);
-  }
-
-  // --- Date ranges ---
-  if (filters.openDateFrom) { conditions.push(`bmcservicedesk__opendatetime__c >= $${idx++}`); params.push(filters.openDateFrom); }
-  if (filters.openDateTo)   { conditions.push(`bmcservicedesk__opendatetime__c <= $${idx++}`); params.push(filters.openDateTo); }
-
-  if (filters.dueDateFrom)  { conditions.push(`bmcservicedesk__duedatetime__c >= $${idx++}`); params.push(filters.dueDateFrom); }
-  if (filters.dueDateTo)    { conditions.push(`bmcservicedesk__duedatetime__c <= $${idx++}`); params.push(filters.dueDateTo); }
-
-  if (filters.resolveDateFrom) { conditions.push(`resolved_date__c >= $${idx++}`); params.push(filters.resolveDateFrom); }
-  if (filters.resolveDateTo)   { conditions.push(`resolved_date__c <= $${idx++}`); params.push(filters.resolveDateTo); }
-
-  if (filters.closedDateFrom) { conditions.push(`bmcservicedesk__closedatetime__c >= $${idx++}`); params.push(filters.closedDateFrom); }
-  if (filters.closedDateTo)   { conditions.push(`bmcservicedesk__closedatetime__c <= $${idx++}`); params.push(filters.closedDateTo); }
+  if (filters.openDateFrom)    { conditions.push(`bmcrf_opened_date_formula__c >= $${idx++}`); params.push(filters.openDateFrom); }
+  if (filters.openDateTo)      { conditions.push(`bmcrf_opened_date_formula__c <= $${idx++}`); params.push(filters.openDateTo); }
+  if (filters.dueDateFrom)     { conditions.push(`BMCRF_Due_Date_Formula__c >= $${idx++}`); params.push(filters.dueDateFrom); }
+  if (filters.dueDateTo)       { conditions.push(`BMCRF_Due_Date_Formula__c <= $${idx++}`); params.push(filters.dueDateTo); }
+  if (filters.resolveDateFrom) { conditions.push(`Resolved_Date__c >= $${idx++}`); params.push(filters.resolveDateFrom); }
+  if (filters.resolveDateTo)   { conditions.push(`Resolved_Date__c <= $${idx++}`); params.push(filters.resolveDateTo); }
+  if (filters.closedDateFrom)  { conditions.push(`BMCRF_Closed_Date_Formula__c >= $${idx++}`); params.push(filters.closedDateFrom); }
+  if (filters.closedDateTo)    { conditions.push(`BMCRF_Closed_Date_Formula__c <= $${idx++}`); params.push(filters.closedDateTo); }
 
   return { whereClause: `WHERE ${conditions.join(" AND ")}`, params };
 };
 
-/**
- * Builds parameterized WHERE clause for the task table.
- * Skips: employee, requestor, resolveDateFrom/To (columns don't exist in task).
- *
- * @param {object} filters
- * @returns {{ whereClause: string, params: any[] }}
- */
 export const buildTaskWhereClause = (filters = {}) => {
-  const conditions = ["bmcservicedesk__incidenttype__c IS NOT NULL"];
+  const conditions = ["1=1"];
   const params = [];
   let idx = 1;
 
-  // Multi-select
   if (filters.queue?.length) {
     const ph = filters.queue.map(() => `$${idx++}`).join(", ");
-    conditions.push(`bmcservicedesk__queue__c IN (${ph})`);
+    conditions.push(`BMCServiceDesk__Queue__c IN (${ph})`);
     params.push(...filters.queue);
   }
-
   if (filters.priority?.length) {
     const ph = filters.priority.map(() => `$${idx++}`).join(", ");
-    conditions.push(`bmcservicedesk__fkpriority__c IN (${ph})`);
+    conditions.push(`BMCServiceDesk__FKPriority__c IN (${ph})`);
     params.push(...filters.priority);
   }
-
   if (filters.status?.length) {
     const ph = filters.status.map(() => `$${idx++}`).join(", ");
-    conditions.push(`bmcservicedesk__fkstatus__c IN (${ph})`);
+    conditions.push(`bmcservicedesk__status_id__c IN (${ph})`);
     params.push(...filters.status);
   }
 
-  // Free text
-  if (filters.shortDescription) {
-    conditions.push(`bmcservicedesk__shortdescription__c ILIKE $${idx++}`);
-    params.push(`%${filters.shortDescription}%`);
-  }
+  if (filters.shortDescription) { conditions.push(`bmcservicedesk__taskdescription__c ILIKE $${idx++}`); params.push(`%${filters.shortDescription}%`); }
+  if (filters.description)      { conditions.push(`bmcservicedesk__taskdescription__c ILIKE $${idx++}`); params.push(`%${filters.description}%`); }
+  if (filters.resolution)       { conditions.push(`BMCServiceDesk__taskResolution__c ILIKE $${idx++}`); params.push(`%${filters.resolution}%`); }
 
-  if (filters.description) {
-    conditions.push(`bmcservicedesk__taskdescription__c ILIKE $${idx++}`);
-    params.push(`%${filters.description}%`);
-  }
-
-  if (filters.resolution) {
-    conditions.push(`bmcservicedesk__taskresolution__c ILIKE $${idx++}`);
-    params.push(`%${filters.resolution}%`);
-  }
-
-  // Date ranges (task has openDateTime, dueDateTime, closeDateTime — NOT resolveDate)
-  if (filters.openDateFrom) { conditions.push(`bmcservicedesk__opendatetime__c >= $${idx++}`); params.push(filters.openDateFrom); }
-  if (filters.openDateTo)   { conditions.push(`bmcservicedesk__opendatetime__c <= $${idx++}`); params.push(filters.openDateTo); }
-
-  if (filters.dueDateFrom)  { conditions.push(`bmcservicedesk__duedatetime__c >= $${idx++}`); params.push(filters.dueDateFrom); }
-  if (filters.dueDateTo)    { conditions.push(`bmcservicedesk__duedatetime__c <= $${idx++}`); params.push(filters.dueDateTo); }
-
-  if (filters.closedDateFrom) { conditions.push(`bmcservicedesk__closedatetime__c >= $${idx++}`); params.push(filters.closedDateFrom); }
-  if (filters.closedDateTo)   { conditions.push(`bmcservicedesk__closedatetime__c <= $${idx++}`); params.push(filters.closedDateTo); }
+  if (filters.openDateFrom)   { conditions.push(`BMCServiceDesk__openDateTime__c >= $${idx++}`); params.push(filters.openDateFrom); }
+  if (filters.openDateTo)     { conditions.push(`BMCServiceDesk__openDateTime__c <= $${idx++}`); params.push(filters.openDateTo); }
+  if (filters.dueDateFrom)    { conditions.push(`BMCServiceDesk__dueDateTime__c >= $${idx++}`); params.push(filters.dueDateFrom); }
+  if (filters.dueDateTo)      { conditions.push(`BMCServiceDesk__dueDateTime__c <= $${idx++}`); params.push(filters.dueDateTo); }
+  if (filters.closedDateFrom) { conditions.push(`BMCServiceDesk__closeDateTime__c >= $${idx++}`); params.push(filters.closedDateFrom); }
+  if (filters.closedDateTo)   { conditions.push(`BMCServiceDesk__closeDateTime__c <= $${idx++}`); params.push(filters.closedDateTo); }
 
   return { whereClause: `WHERE ${conditions.join(" AND ")}`, params };
 };
 
-// ---------------------------------------------------------------------------
-// SELECT column definitions (same aliases for UNION compatibility)
-// ---------------------------------------------------------------------------
-
 const INCIDENT_COLS = `
-  name                                     AS "ticketId",
-  bmcrf_shortdescription_c                 AS "ticketShortDesc",
-  bmcservicedesk__incidentdescription__c   AS "ticketDescription",
-  bmcservicedesk__incidenttype__c          AS "ticketType",
-  bmcservicedesk__fkstatus__c              AS "ticketStatus",
-  bmcservicedesk__queue__c                 AS "queue",
-  bmcservicedesk__fkpriority__c            AS "priority",
-  employeename__c                          AS "employee",
-  requestor_contact__c                     AS "requestor",
-  bmcrf_staff_firstname_c                  AS "staffName",
-  request_definition_formula_c             AS "ticketFormName",
-  bmcservicedesk__opendatetime__c          AS "ticketOpenDate",
-  'INCIDENT'                               AS "source"
+    id as id,
+    bmcrf_short_description__c AS "ticketShortDesc",
+    bmcservicedesk__incidentdescription__c AS "ticketDescription",
+    CASE 
+      WHEN bmcservicedesk__isservicerequest__c = TRUE THEN 'serviceRequest'
+      ELSE 'incident'
+    END as ticketType,
+    bmcservicedesk__status_id__c AS "ticketStatus",
+    bmcrf_staff_firstname__c AS "staffName",
+    name AS "ticketId",
+    BMCServiceDesk__clientId__c as "clientId",
+    request_definition_formula__c AS "ticketFormName",
+    bmcrf_opened_date_formula__c::timestamp AS "ticketOpenDate"
 `;
 
 const TASK_COLS = `
-  name                                     AS "ticketId",
-  bmcrf_shortdescription_c                 AS "ticketShortDesc",
-  bmcservicedesk__taskdescription__c       AS "ticketDescription",
-  bmcservicedesk__incidenttype__c          AS "ticketType",
-  bmcservicedesk__fkstatus__c             AS "ticketStatus",
-  bmcservicedesk__queue__c                 AS "queue",
-  bmcservicedesk__fkpriority__c            AS "priority",
-  NULL                                     AS "employee",
-  NULL                                     AS "requestor",
-  bmcrf_staff_firstname_c                  AS "staffName",
-  request_definition_formula_c             AS "ticketFormName",
-  bmcservicedesk__opendatetime__c          AS "ticketOpenDate",
-  'TASK'                                   AS "source"
+    id as id,
+    bmcservicedesk__taskdescription__c AS "ticketShortDesc",
+    bmcservicedesk__taskdescription__c AS "ticketDescription",
+    'task' AS "ticketType",
+    bmcservicedesk__status_id__c AS "ticketStatus",
+    staff_formula__c AS "staffName",
+    name AS "ticketId",
+    BMCServiceDesk__Client_ID__c as "clientId",
+    bmcservicedesk__taskdescription__c AS "ticketFormName",
+    BMCServiceDesk__openDateTime__c::timestamp AS "ticketOpenDate"
 `;
-
-// ---------------------------------------------------------------------------
-// Paginated ticket queries
-// ---------------------------------------------------------------------------
 
 export const queryIncidentTickets = (whereClause, params, pageSize, offset) => {
   const pool = getPool();
+  const { ticketSchema } = getConfig();
   const p = params.length;
   return pool.query(
-    `SELECT ${INCIDENT_COLS} FROM gold1.bmcservicedesk__incident_c ${whereClause}
-     ORDER BY bmcservicedesk__opendatetime__c DESC
+    `SELECT ${INCIDENT_COLS} FROM ${ticketSchema}.bmcservicedesk__incident__c ${whereClause}
+     ORDER BY "ticketOpenDate" DESC
      LIMIT $${p + 1} OFFSET $${p + 2}`,
     [...params, pageSize, offset]
   );
@@ -219,32 +149,28 @@ export const queryIncidentTickets = (whereClause, params, pageSize, offset) => {
 
 export const queryTaskTickets = (whereClause, params, pageSize, offset) => {
   const pool = getPool();
+  const { ticketSchema } = getConfig();
   const p = params.length;
   return pool.query(
-    `SELECT ${TASK_COLS} FROM gold1.bmcservicedesk_task_c ${whereClause}
-     ORDER BY bmcservicedesk__opendatetime__c DESC
+    `SELECT ${TASK_COLS} FROM ${ticketSchema}.bmcservicedesk__task__c ${whereClause}
+     ORDER BY "ticketOpenDate" DESC
      LIMIT $${p + 1} OFFSET $${p + 2}`,
     [...params, pageSize, offset]
   );
 };
 
-/**
- * UNION ALL both tables — params for incident and task are separate arrays.
- * Both WHERE clauses are built independently then combined.
- */
 export const queryUnionTickets = (incWhere, incParams, taskWhere, taskParams, pageSize, offset) => {
   const pool = getPool();
+  const { ticketSchema } = getConfig();
   const iLen = incParams.length;
   const tLen = taskParams.length;
-
-  // Task params re-indexed after incident params
   const taskWhereReindexed = taskWhere.replace(/\$(\d+)/g, (_, n) => `$${parseInt(n) + iLen}`);
 
   const sql = `
     SELECT * FROM (
-      SELECT ${INCIDENT_COLS} FROM gold1.bmcservicedesk__incident_c ${incWhere}
+      SELECT ${INCIDENT_COLS} FROM ${ticketSchema}.bmcservicedesk__incident__c ${incWhere}
       UNION ALL
-      SELECT ${TASK_COLS} FROM gold1.bmcservicedesk_task_c ${taskWhereReindexed}
+      SELECT ${TASK_COLS} FROM ${ticketSchema}.bmcservicedesk__task__c ${taskWhereReindexed}
     ) combined
     ORDER BY "ticketOpenDate" DESC
     LIMIT $${iLen + tLen + 1} OFFSET $${iLen + tLen + 2}
@@ -253,90 +179,65 @@ export const queryUnionTickets = (incWhere, incParams, taskWhere, taskParams, pa
   return pool.query(sql, [...incParams, ...taskParams, pageSize, offset]);
 };
 
-// ---------------------------------------------------------------------------
-// Count queries
-// ---------------------------------------------------------------------------
-
 export const countIncidentTickets = (whereClause, params) => {
   const pool = getPool();
-  return pool.query(
-    `SELECT COUNT(*) AS total FROM gold1.bmcservicedesk__incident_c ${whereClause}`,
-    params
-  );
+  const { ticketSchema } = getConfig();
+  return pool.query(`SELECT COUNT(*) AS total FROM ${ticketSchema}.bmcservicedesk__incident__c ${whereClause}`, params);
 };
 
 export const countTaskTickets = (whereClause, params) => {
   const pool = getPool();
-  return pool.query(
-    `SELECT COUNT(*) AS total FROM gold1.bmcservicedesk_task_c ${whereClause}`,
-    params
-  );
+  const { ticketSchema } = getConfig();
+  return pool.query(`SELECT COUNT(*) AS total FROM ${ticketSchema}.bmcservicedesk__task__c ${whereClause}`, params);
 };
 
 export const countUnionTickets = (incWhere, incParams, taskWhere, taskParams) => {
   const pool = getPool();
+  const { ticketSchema } = getConfig();
   const iLen = incParams.length;
   const taskWhereReindexed = taskWhere.replace(/\$(\d+)/g, (_, n) => `$${parseInt(n) + iLen}`);
 
   const sql = `
-    SELECT COUNT(*) AS total FROM (
-      SELECT name FROM gold1.bmcservicedesk__incident_c ${incWhere}
+    WITH combined AS (
+      SELECT name FROM ${ticketSchema}.bmcservicedesk__incident__c ${incWhere}
       UNION ALL
-      SELECT name FROM gold1.bmcservicedesk_task_c ${taskWhereReindexed}
-    ) combined
+      SELECT name FROM ${ticketSchema}.bmcservicedesk__task__c ${taskWhereReindexed}
+    )
+    SELECT COUNT(*) AS total FROM combined
   `;
 
   return pool.query(sql, [...incParams, ...taskParams]);
 };
 
-// ---------------------------------------------------------------------------
-// Filter option queries — DISTINCT values scoped to current filters
-// ---------------------------------------------------------------------------
-
-/**
- * Returns DISTINCT non-null values for a column from incident table,
- * constrained by current where clause.
- */
 export const queryIncidentDistinct = (col, whereClause, params) => {
   const pool = getPool();
+  const { ticketSchema } = getConfig();
   return pool.query(
-    `SELECT DISTINCT ${col} AS value
-     FROM gold1.bmcservicedesk__incident_c
-     ${whereClause}
-     AND ${col} IS NOT NULL
-     ORDER BY ${col}`,
+    `SELECT DISTINCT ${col} AS value FROM ${ticketSchema}.bmcservicedesk__incident__c ${whereClause} AND ${col} IS NOT NULL ORDER BY ${col}`,
     params
   );
 };
 
-/**
- * Returns DISTINCT non-null values for a column from task table.
- */
 export const queryTaskDistinct = (col, whereClause, params) => {
   const pool = getPool();
+  const { ticketSchema } = getConfig();
   return pool.query(
-    `SELECT DISTINCT ${col} AS value
-     FROM gold1.bmcservicedesk_task_c
-     ${whereClause}
-     AND ${col} IS NOT NULL
-     ORDER BY ${col}`,
+    `SELECT DISTINCT ${col} AS value FROM ${ticketSchema}.bmcservicedesk__task__c ${whereClause} AND ${col} IS NOT NULL ORDER BY ${col}`,
     params
   );
 };
 
-/**
- * Returns DISTINCT non-null values UNION'd from both tables.
- */
 export const queryUnionDistinct = (col, incWhere, incParams, taskWhere, taskParams) => {
   const pool = getPool();
+  const { ticketSchema } = getConfig();
   const iLen = incParams.length;
   const taskWhereReindexed = taskWhere.replace(/\$(\d+)/g, (_, n) => `$${parseInt(n) + iLen}`);
 
   const sql = `
     SELECT DISTINCT value FROM (
-      SELECT ${col} AS value FROM gold1.bmcservicedesk__incident_c ${incWhere} AND ${col} IS NOT NULL
+      SELECT ${col} AS value FROM ${ticketSchema}.bmcservicedesk__incident__c ${incWhere} AND ${col} IS NOT NULL
       UNION ALL
-      SELECT ${col} AS value FROM gold1.bmcservicedesk_task_c ${taskWhereReindexed} AND ${col} IS NOT NULL
+      SELECT ${col} AS value FROM ${ticketSchema}.bmcservicedesk__task__c ${taskWhereReindexed} AND ${col} IS NOT NULL
     ) combined
     WHERE value IS NOT NULL
     ORDER BY value
@@ -346,11 +247,12 @@ export const queryUnionDistinct = (col, incWhere, incParams, taskWhere, taskPara
 };
 
 // ---------------------------------------------------------------------------
-// Existing detail queries (unchanged)
+// Existing detail queries
 // ---------------------------------------------------------------------------
 
 export const queryServiceRequestFormDetails = (ticketId) => {
   const pool = getPool();
+  const { ticketSchema } = getConfig();
   return pool.query(`
     SELECT
       "contact_formula__c"                      AS "contact",
@@ -388,7 +290,7 @@ export const queryServiceRequestFormDetails = (ticketId) => {
       "BMCServiceDesk__respondedDateTime__c"    AS "respondedDate",
       "BMCServiceDesk__Queue__c"                AS "queue",
       "Staff_Email__c"                          AS "staff"
-    FROM gold1."BMCServiceDesk__Incident__c"
+    FROM ${ticketSchema}."BMCServiceDesk__Incident__c"
     WHERE "Name" = $1
     LIMIT 1
   `, [ticketId]);
@@ -396,6 +298,7 @@ export const queryServiceRequestFormDetails = (ticketId) => {
 
 export const queryTaskFormDetails = (taskId) => {
   const pool = getPool();
+  const { ticketSchema } = getConfig();
   return pool.query(`
     SELECT
       "contact_formula__c"                      AS "contact",
@@ -433,7 +336,7 @@ export const queryTaskFormDetails = (taskId) => {
       "BMCServiceDesk__respondedDateTime__c"    AS "respondedDate",
       "BMCServiceDesk__Queue__c"                AS "queue",
       "Staff_Email__c"                          AS "staff"
-    FROM gold1.bmcservicedesk_task_c
+    FROM ${ticketSchema}.bmcservicedesk__task__c
     WHERE "Name" = $1
     LIMIT 1
   `, [taskId]);
@@ -441,14 +344,15 @@ export const queryTaskFormDetails = (taskId) => {
 
 export const querySubmittedForm = (ticketId) => {
   const pool = getPool();
+  const { ticketSchema } = getConfig();
   return pool.query(`
     SELECT
       bmcservicedesk__input__c    AS "input",
       bmcservicedesk__response__c AS "response"
-    FROM gold1.bmcservicedesk__srm_requestdetailinputs__c bsrc
+    FROM ${ticketSchema}.bmcservicedesk__srm_requestdetailinputs__c bsrc
     WHERE bmcservicedesk__fkrequestdetail__c = (
       SELECT id
-      FROM gold1.bmcservicedesk__srm_requestdetail__c bsrc2
+      FROM ${ticketSchema}.bmcservicedesk__srm_requestdetail__c bsrc2
       WHERE bsrc2.bmcservicedesk__fkincident__c = $1
     )
     ORDER BY bsrc.lastmodifieddate

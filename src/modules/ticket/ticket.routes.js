@@ -19,10 +19,20 @@ import { authenticateJwt } from "../../middlewares/auth.middleware.js";
 const router = express.Router();
 
 /** POST /api/v1/tickets/get-data — filtered, paginated ticket list */
-router.post("/get-data",           authenticateJwt, validate(getTicketsSchema, "body"),       getTickets);
+router.post(
+  "/get-data",
+  // authenticateJwt,
+  validate(getTicketsSchema, "body"),
+  getTickets
+);
 
 /** POST /api/v1/tickets/get-filter-options — dependent dropdown values */
-router.post("/get-filter-options", authenticateJwt, validate(getFilterOptionsSchema, "body"), getFilterOptions);
+router.post(
+  "/get-filter-options",
+  // authenticateJwt,
+  validate(getFilterOptionsSchema, "body"),
+  getFilterOptions
+);
 
 /** POST /api/v1/tickets/get-service-request-form */
 router.post("/get-service-request-form", authenticateJwt, validate(getTicketDetailsSchema), getServiceRequestFormDetails);
