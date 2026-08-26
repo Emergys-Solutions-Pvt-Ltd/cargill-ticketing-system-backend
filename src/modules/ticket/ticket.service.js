@@ -1,6 +1,16 @@
 import {
-  queryTickets,
-  countTickets,
+  resolveTableMode,
+  buildIncidentWhereClause,
+  buildTaskWhereClause,
+  queryIncidentTickets,
+  queryTaskTickets,
+  queryUnionTickets,
+  countIncidentTickets,
+  countTaskTickets,
+  countUnionTickets,
+  queryIncidentDistinct,
+  queryTaskDistinct,
+  queryUnionDistinct,
   queryServiceRequestFormDetails,
   queryTaskFormDetails,
   querySubmittedForm,
@@ -22,7 +32,7 @@ import {
 } from "./ticket.details.model.js";
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Shared form detail mapper
 // ---------------------------------------------------------------------------
 
 const mapFormDetails = (row) => ({
@@ -74,24 +84,42 @@ const mapFormDetails = (row) => ({
 });
 
 // ---------------------------------------------------------------------------
-// Ticket (Incident / Service Request) services
+// Ticket list (with filters)
 // ---------------------------------------------------------------------------
 
 /**
- * Fetches paginated tickets.
- *
- * @param {{ page: number, pageSize: number }} params
- * @returns {Promise<{ tickets: object[], pagination: object }>}
+ * Fetches paginated, filtered tickets.
+ * Automatically selects table mode (INCIDENT_ONLY / TASK_ONLY / UNION).
  */
-export const fetchTickets = async ({ page, pageSize }) => {
+export const fetchTickets = async ({ page, pageSize, ...filters }) => {
   const offset = (page - 1) * pageSize;
+  const mode   = resolveTableMode(filters);
 
-  const [dataResult, countResult] = await Promise.all([
-    queryTickets(pageSize, offset),
-    countTickets(),
-  ]);
+  let dataResult, countResult;
 
-  const total = parseInt(countResult.rows[0].total, 10);
+  if (mode === "INCIDENT_ONLY") {
+    const { whereClause, params } = buildIncidentWhereClause(filters);
+    [dataResult, countResult] = await Promise.all([
+      queryIncidentTickets(whereClause, params, pageSize, offset),
+      countIncidentTickets(whereClause, params),
+    ]);
+  } else if (mode === "TASK_ONLY") {
+    const { whereClause, params } = buildTaskWhereClause(filters);
+    [dataResult, countResult] = await Promise.all([
+      queryTaskTickets(whereClause, params, pageSize, offset),
+      countTaskTickets(whereClause, params),
+    ]);
+  } else {
+    // UNION — build both WHERE clauses independently
+    const inc  = buildIncidentWhereClause(filters);
+    const task = buildTaskWhereClause(filters);
+    [dataResult, countResult] = await Promise.all([
+      queryUnionTickets(inc.whereClause, inc.params, task.whereClause, task.params, pageSize, offset),
+      countUnionTickets(inc.whereClause, inc.params, task.whereClause, task.params),
+    ]);
+  }
+
+  const total      = parseInt(countResult.rows[0].total, 10);
   const totalPages = Math.ceil(total / pageSize);
 
   return {
@@ -107,12 +135,52 @@ export const fetchTickets = async ({ page, pageSize }) => {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Filter options (dependent dropdowns)
+// ---------------------------------------------------------------------------
+
 /**
- * Fetches service request form details.
+ * Returns available dropdown options constrained by current filters.
+ * Options for queue, priority, status are dependent on each other.
+ * Employee and requestor are incident-only.
  *
- * @param {{ ticketId: string }} params
- * @returns {Promise<object|null>}
+ * @param {object} filters
+ * @returns {{ queue, priority, status, employee, requestor }}
  */
+export const fetchFilterOptions = async (filters = {}) => {
+  const mode = resolveTableMode(filters);
+
+  const inc  = mode !== "TASK_ONLY"     ? buildIncidentWhereClause(filters) : null;
+  const task = mode !== "INCIDENT_ONLY" ? buildTaskWhereClause(filters)     : null;
+
+  const toValues = (result) => result.rows.map((r) => r.value).filter(Boolean);
+
+  const getDistinct = (col, incidentOnly = false) => {
+    if (incidentOnly || mode === "INCIDENT_ONLY") {
+      return queryIncidentDistinct(col, inc.whereClause, inc.params).then(toValues);
+    }
+    if (mode === "TASK_ONLY") {
+      return queryTaskDistinct(col, task.whereClause, task.params).then(toValues);
+    }
+    // UNION — merge distinct from both tables
+    return queryUnionDistinct(col, inc.whereClause, inc.params, task.whereClause, task.params).then(toValues);
+  };
+
+  const [queue, priority, status, employee, requestor] = await Promise.all([
+    getDistinct("bmcservicedesk__queue__c"),
+    getDistinct("bmcservicedesk__fkpriority__c"),
+    getDistinct("bmcservicedesk__fkstatus__c"),
+    getDistinct("employeename__c",      true),  // incident only
+    getDistinct("requestor_contact__c", true),  // incident only
+  ]);
+
+  return { queue, priority, status, employee, requestor };
+};
+
+// ---------------------------------------------------------------------------
+// Detail form services
+// ---------------------------------------------------------------------------
+
 export const fetchServiceRequestFormDetails = async ({ ticketId }) => {
   const result = await queryServiceRequestFormDetails(ticketId);
   const row = result.rows[0];
@@ -120,21 +188,8 @@ export const fetchServiceRequestFormDetails = async ({ ticketId }) => {
   return mapFormDetails(row);
 };
 
-/**
- * Fetches all accordion detail sections for a ticket (incident) in parallel.
- *
- * @param {{ ticketId: string }} params
- * @returns {Promise<object>}
- */
 export const fetchTicketDetails = async ({ ticketId }) => {
-  const [
-    actionHistoryResult,
-    notesAttachmentsResult,
-    approvalHistoryResult,
-    incidentHistoryResult,
-    linkedTasksResult,
-    linkedIncidentsResult,
-  ] = await Promise.all([
+  const [a, b, c, d, e, f] = await Promise.all([
     queryActionHistory(ticketId),
     queryNotesAndAttachments(ticketId),
     queryApprovalHistory(ticketId),
@@ -142,27 +197,16 @@ export const fetchTicketDetails = async ({ ticketId }) => {
     queryLinkedTasks(ticketId),
     queryLinkedIncidents(ticketId),
   ]);
-
   return {
-    actionHistory:       actionHistoryResult.rows,
-    notesAndAttachments: notesAttachmentsResult.rows,
-    approvalHistory:     approvalHistoryResult.rows,
-    incidentHistory:     incidentHistoryResult.rows,
-    linkedTasks:         linkedTasksResult.rows,
-    linkedIncidents:     linkedIncidentsResult.rows,
+    actionHistory:       a.rows,
+    notesAndAttachments: b.rows,
+    approvalHistory:     c.rows,
+    incidentHistory:     d.rows,
+    linkedTasks:         e.rows,
+    linkedIncidents:     f.rows,
   };
 };
 
-// ---------------------------------------------------------------------------
-// Task services
-// ---------------------------------------------------------------------------
-
-/**
- * Fetches task form details (same shape as service request form).
- *
- * @param {{ taskId: string }} params
- * @returns {Promise<object|null>}
- */
 export const fetchTaskFormDetails = async ({ taskId }) => {
   const result = await queryTaskFormDetails(taskId);
   const row = result.rows[0];
@@ -170,21 +214,8 @@ export const fetchTaskFormDetails = async ({ taskId }) => {
   return mapFormDetails(row);
 };
 
-/**
- * Fetches all accordion detail sections for a task in parallel.
- *
- * @param {{ taskId: string }} params
- * @returns {Promise<object>}
- */
 export const fetchTaskDetails = async ({ taskId }) => {
-  const [
-    actionHistoryResult,
-    notesAttachmentsResult,
-    approvalHistoryResult,
-    incidentHistoryResult,
-    linkedTasksResult,
-    linkedIncidentsResult,
-  ] = await Promise.all([
+  const [a, b, c, d, e, f] = await Promise.all([
     queryTaskActionHistory(taskId),
     queryTaskNotesAndAttachments(taskId),
     queryTaskApprovalHistory(taskId),
@@ -192,44 +223,23 @@ export const fetchTaskDetails = async ({ taskId }) => {
     queryTaskLinkedTasks(taskId),
     queryTaskLinkedIncidents(taskId),
   ]);
-
   return {
-    actionHistory:       actionHistoryResult.rows,
-    notesAndAttachments: notesAttachmentsResult.rows,
-    approvalHistory:     approvalHistoryResult.rows,
-    incidentHistory:     incidentHistoryResult.rows,
-    linkedTasks:         linkedTasksResult.rows,
-    linkedIncidents:     linkedIncidentsResult.rows,
+    actionHistory:       a.rows,
+    notesAndAttachments: b.rows,
+    approvalHistory:     c.rows,
+    incidentHistory:     d.rows,
+    linkedTasks:         e.rows,
+    linkedIncidents:     f.rows,
   };
 };
 
-/**
- * Fetches submitted form for a service request.
- * Transforms rows into a fully dynamic structure:
- *   - rows where response === "header section" (case-insensitive) → { type: "header", title }
- *   - all other rows                                               → { type: "field",  label, value }
- * Zero hard-coded knowledge of header names — the DB drives everything.
- *
- * @param {{ ticketId: string }} params
- * @returns {Promise<Array<{ type: "header"|"field", title?: string, label?: string, value?: string }>>}
- */
 export const fetchSubmittedForm = async ({ ticketId }) => {
   const result = await querySubmittedForm(ticketId);
-
   return result.rows.map((row) => {
     const normalizedResponse = String(row.response ?? "").trim().toLowerCase();
-
     if (normalizedResponse === "header section") {
-      return {
-        type: "header",
-        title: row.input,
-      };
+      return { type: "header", title: row.input };
     }
-
-    return {
-      type: "field",
-      label: row.input,
-      value: row.response,
-    };
+    return { type: "field", label: row.input, value: row.response };
   });
 };

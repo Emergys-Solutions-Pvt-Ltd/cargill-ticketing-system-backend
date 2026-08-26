@@ -1,5 +1,6 @@
 import {
   fetchTickets,
+  fetchFilterOptions,
   fetchServiceRequestFormDetails,
   fetchTicketDetails,
   fetchTaskFormDetails,
@@ -11,12 +12,22 @@ import asyncWrapper from "../../utils/asyncWrapper.js";
 
 /**
  * POST /api/v1/tickets/get-data
- * Body: { page, pageSize }
+ * Body: { page, pageSize, ticketType, queue[], priority[], status[], ... }
  */
 export const getTickets = asyncWrapper(async (req, res) => {
-  const { page, pageSize } = req.body;
-  const result = await fetchTickets({ page, pageSize });
+  const { page, pageSize, ...filters } = req.body;
+  const result = await fetchTickets({ page, pageSize, ...filters });
   return res.sendResponse(MESSAGES.ticketsFetched, result);
+});
+
+/**
+ * POST /api/v1/tickets/get-filter-options
+ * Body: same filter fields as get-data (no page/pageSize)
+ * Returns dependent dropdown options scoped to current filter selection.
+ */
+export const getFilterOptions = asyncWrapper(async (req, res) => {
+  const result = await fetchFilterOptions(req.body);
+  return res.sendResponse(MESSAGES.filterOptionsFetched, result);
 });
 
 /**
@@ -33,7 +44,6 @@ export const getServiceRequestFormDetails = asyncWrapper(async (req, res) => {
 /**
  * POST /api/v1/tickets/get-details
  * Body: { ticketId: string }
- * Returns all accordion sections for a ticket (incident/service request).
  */
 export const getTicketDetails = asyncWrapper(async (req, res) => {
   const { ticketId } = req.body;
@@ -44,7 +54,6 @@ export const getTicketDetails = asyncWrapper(async (req, res) => {
 /**
  * POST /api/v1/tickets/get-task-form
  * Body: { ticketId: string }
- * Returns task form details (same shape as service request form).
  */
 export const getTaskFormDetails = asyncWrapper(async (req, res) => {
   const { ticketId } = req.body;
@@ -56,7 +65,6 @@ export const getTaskFormDetails = asyncWrapper(async (req, res) => {
 /**
  * POST /api/v1/tickets/get-task-details
  * Body: { ticketId: string }
- * Returns all accordion sections for a task.
  */
 export const getTaskDetails = asyncWrapper(async (req, res) => {
   const { ticketId } = req.body;
@@ -67,9 +75,6 @@ export const getTaskDetails = asyncWrapper(async (req, res) => {
 /**
  * POST /api/v1/tickets/get-submitted-form
  * Body: { ticketId: string }
- * Returns dynamically transformed submitted form rows.
- * Rows with response === "header section" become { type: "header", title }.
- * All other rows become { type: "field", label, value }.
  */
 export const getSubmittedForm = asyncWrapper(async (req, res) => {
   const { ticketId } = req.body;
