@@ -15,6 +15,9 @@ export const filterFields = {
   status:    multiSelect(),
   employee:  multiSelect(),  // incident-only — forces incident table
   requestor: multiSelect(),  // incident-only — forces incident table
+  categoryLevel1: multiSelect(), // incident-only
+  categoryLevel2: multiSelect(), // incident-only
+  categoryLevel3: multiSelect(), // incident-only
   shortDescription: Joi.string().trim().max(200).optional(),
   description:      Joi.string().trim().max(200).optional(),
   resolution:       Joi.string().trim().max(200).optional(),

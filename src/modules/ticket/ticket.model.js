@@ -6,12 +6,12 @@ import { getConfig } from "../../config/env.config.js";
 // ---------------------------------------------------------------------------
 
 export const resolveTableMode = (filters = {}) => {
-  const { ticketType, employee, requestor, resolveDateFrom, resolveDateTo } = filters;
+  const { ticketType, employee, requestor, resolveDateFrom, resolveDateTo, categoryLevel1, categoryLevel2, categoryLevel3 } = filters;
 
   if (ticketType === "TASK") return "TASK_ONLY";
   if (ticketType === "SERVICE_REQUEST" || ticketType === "INCIDENT") return "INCIDENT_ONLY";
 
-  if (employee?.length || requestor?.length || resolveDateFrom || resolveDateTo) {
+  if (employee?.length || requestor?.length || resolveDateFrom || resolveDateTo || categoryLevel1?.length || categoryLevel2?.length || categoryLevel3?.length) {
     return "INCIDENT_ONLY";
   }
 
@@ -53,6 +53,21 @@ export const buildIncidentWhereClause = (filters = {}) => {
     const ph = filters.requestor.map(() => `$${idx++}`).join(", ");
     conditions.push(`Requestor_Contact__c IN (${ph})`);
     params.push(...filters.requestor);
+  }
+  if (filters.categoryLevel1?.length) {
+    const ph = filters.categoryLevel1.map(() => `$${idx++}`).join(", ");
+    conditions.push(`hr_category_level_1__c IN (${ph})`);
+    params.push(...filters.categoryLevel1);
+  }
+  if (filters.categoryLevel2?.length) {
+    const ph = filters.categoryLevel2.map(() => `$${idx++}`).join(", ");
+    conditions.push(`hr_category_level_2__c IN (${ph})`);
+    params.push(...filters.categoryLevel2);
+  }
+  if (filters.categoryLevel3?.length) {
+    const ph = filters.categoryLevel3.map(() => `$${idx++}`).join(", ");
+    conditions.push(`hr_category_level_3__c IN (${ph})`);
+    params.push(...filters.categoryLevel3);
   }
 
   if (filters.shortDescription) { conditions.push(`bmcrf_short_description__c ILIKE $${idx++}`); params.push(`%${filters.shortDescription}%`); }

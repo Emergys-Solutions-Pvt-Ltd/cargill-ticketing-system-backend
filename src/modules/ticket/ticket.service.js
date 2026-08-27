@@ -169,15 +169,18 @@ export const fetchFilterOptions = async (filters = {}) => {
     return queryUnionDistinct(col, inc.whereClause, inc.params, task.whereClause, task.params).then(toValues);
   };
 
-  const [queue, priority, status, employee, requestor] = await Promise.all([
+  const [queue, priority, status, employee, requestor, categoryLevel1, categoryLevel2, categoryLevel3] = await Promise.all([
     getDistinct("BMCServiceDesk__Queue__c"),
     getDistinct("BMCServiceDesk__FKPriority__c"),
     getDistinct("bmcservicedesk__status_id__c"),
-    getDistinct("EmployeeName__c",      true),  // incident only
-    getDistinct("Requestor_Contact__c", true),  // incident only
+    getDistinct("EmployeeName__c",        true),  // incident only
+    getDistinct("Requestor_Contact__c",   true),  // incident only
+    getDistinct("hr_category_level_1__c", true),  // incident only
+    getDistinct("hr_category_level_2__c", true),  // incident only
+    getDistinct("hr_category_level_3__c", true),  // incident only
   ]);
 
-  return { queue, priority, status, employee, requestor };
+  return { queue, priority, status, employee, requestor, categoryLevel1, categoryLevel2, categoryLevel3 };
 };
 
 // ---------------------------------------------------------------------------
