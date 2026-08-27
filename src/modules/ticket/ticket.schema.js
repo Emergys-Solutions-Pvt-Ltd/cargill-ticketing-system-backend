@@ -26,6 +26,7 @@ export const filterFields = {
   resolveDateTo:   dateStr(), // incident-only — forces incident table
   closedDateFrom:  dateStr(),
   closedDateTo:    dateStr(),
+  globalSearch:    Joi.string().trim().max(500).optional(),
 };
 
 export const getTicketsSchema = Joi.object({

@@ -68,6 +68,28 @@ export const buildIncidentWhereClause = (filters = {}) => {
   if (filters.closedDateFrom)  { conditions.push(`BMCRF_Closed_Date_Formula__c >= $${idx++}`); params.push(filters.closedDateFrom); }
   if (filters.closedDateTo)    { conditions.push(`BMCRF_Closed_Date_Formula__c <= $${idx++}`); params.push(filters.closedDateTo); }
 
+  if (filters.globalSearch) {
+    conditions.push(`
+      CONCAT_WS(' ',
+        resolved_date__c::text,
+        bmcservicedesk__dueDateTime__c::text,
+        bmcservicedesk__closeDateTime__c::text,
+        EmployeeName__c::text,
+        Requestor_contact__c::text,
+        from_email_address__c::text,
+        email_sent_to__c::text,
+        bmcservicedesk__queue__c::text,
+        BMCServiceDesk__Priority_ID__c::text,
+        BMCServiceDesk__Status_ID__c::text,
+        bmcrf_short_description__c::text,
+        bmcservicedesk__incidentdescription__c::text,
+        bmcservicedesk__incidentresolution__c::text,
+        bmcrf_opened_date_formula__c::text
+      ) ILIKE $${idx++}
+    `);
+    params.push(`%${filters.globalSearch}%`);
+  }
+
   return { whereClause: `WHERE ${conditions.join(" AND ")}`, params };
 };
 
@@ -102,6 +124,23 @@ export const buildTaskWhereClause = (filters = {}) => {
   if (filters.dueDateTo)      { conditions.push(`BMCServiceDesk__dueDateTime__c <= $${idx++}`); params.push(filters.dueDateTo); }
   if (filters.closedDateFrom) { conditions.push(`BMCServiceDesk__closeDateTime__c >= $${idx++}`); params.push(filters.closedDateFrom); }
   if (filters.closedDateTo)   { conditions.push(`BMCServiceDesk__closeDateTime__c <= $${idx++}`); params.push(filters.closedDateTo); }
+
+  if (filters.globalSearch) {
+    conditions.push(`
+      CONCAT_WS(' ',
+        bmcservicedesk__dueDateTime__c::text,
+        bmcservicedesk__closeDateTime__c::text,
+        bmcservicedesk__queueName__c::text,
+        bmcservicedesk__priority_id__c::text,
+        bmcservicedesk__status_id__c::text,
+        BMCServiceDesk__shortDescription__c::text,
+        bmcservicedesk__taskDescription__c::text,
+        bmcservicedesk__taskResolution__c::text,
+        BMCServiceDesk__openDateTime__c::text
+      ) ILIKE $${idx++}
+    `);
+    params.push(`%${filters.globalSearch}%`);
+  }
 
   return { whereClause: `WHERE ${conditions.join(" AND ")}`, params };
 };
