@@ -115,8 +115,8 @@ export const toggleUserStatusService = async ({ userId, isActive, updatedBy }) =
  * Returns queues assigned to a group or, when no group is supplied, a department.
  * @param {{ groupId?: number, departmentId?: number }} params
  */
-export const getQueuesService = async ({ groupId, departmentId }) => {
-  return getQueuesModel({ groupId, departmentId });
+export const getQueuesService = async ({ groupId, departmentId, userId }) => {
+  return getQueuesModel({ groupId, departmentId, userId });
 };
 
 

@@ -30,8 +30,9 @@ export const toggleUserStatusSchema = Joi.object({
 });
 
 export const getQueuesSchema = Joi.object({
-  groupId: Joi.number().integer().positive().optional(),
+  groupId: Joi.array().items(Joi.number().integer().positive()).single().optional(),
   departmentId: Joi.number().integer().positive().optional(),
+  userId: Joi.number().integer().positive().optional(),
 }).or("groupId", "departmentId").messages({
   "object.missing": "Either groupId or departmentId is required",
 });

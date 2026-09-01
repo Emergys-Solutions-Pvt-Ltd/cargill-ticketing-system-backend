@@ -86,9 +86,9 @@ export const toggleUserStatus = asyncWrapper(async (req, res) => {
  * Otherwise, returns all queues in the department.
  */
 export const getQueues = asyncWrapper(async (req, res) => {
-  const { groupId, departmentId } = req.body ?? {};
+  const { groupId, departmentId, userId } = req.body ?? {};
 
-  const queues = await getQueuesService({ groupId, departmentId });
+  const queues = await getQueuesService({ groupId, departmentId, userId });
   return res.sendResponse(MESSAGES.queuesFetched, queues);
 });
 

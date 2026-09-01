@@ -400,26 +400,61 @@ export const changeDepartmentAdminModel = async ({ oldAdminId, newAdminId, depar
  * Fetches active queues assigned to a group or, when no group is supplied,
  * all active queues in a department.
  *
- * @param {{ groupId?: number, departmentId?: number }} params
+ * If groupId and userId are provided:
+ * - If userId is a USER: returns only the queues from that group that are assigned to the user.
+ * - Otherwise (SUPERUSER/ADMIN): returns all queues in that group.
+ *
+ * @param {{ groupId?: number|number[], departmentId?: number, userId?: number }} params
  * @returns {Promise<{ queueId: number, queueName: string }[]>}
  */
-export const getQueuesModel = async ({ groupId, departmentId }) => {
+export const getQueuesModel = async ({ groupId, departmentId, userId }) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
 
   if (groupId) {
+    const groupIds = Array.isArray(groupId) ? groupId : [groupId];
+
+    if (userId) {
+      // Check the user's role
+      const userRes = await pool.query(
+        `SELECT r.role_code 
+         FROM ${rbacSchema}.app_user u 
+         JOIN ${rbacSchema}.role r ON r.role_id = u.role_id 
+         WHERE u.user_id = $1`, 
+        [userId]
+      );
+      const roleCode = userRes.rows[0]?.role_code;
+      
+      if (roleCode === 'USER') {
+        // Return only queues assigned to this USER within the group
+        const result = await pool.query(
+          `SELECT DISTINCT q.queue_id   AS "queueId",
+                           q.queue_name AS "queueName"
+           FROM   ${rbacSchema}.group_queue gq
+           JOIN   ${rbacSchema}.groups g ON g.group_id = gq.group_id AND g.is_active = TRUE
+           JOIN   ${rbacSchema}.queue q ON q.queue_id = gq.queue_id
+           JOIN   ${rbacSchema}.queue_user qu ON qu.queue_id = gq.queue_id AND qu.user_id = $2
+           WHERE  gq.group_id = ANY($1::bigint[])
+           ORDER  BY q.queue_name`,
+          [groupIds, userId]
+        );
+        return result.rows;
+      }
+    }
+
+    // Default: return all queues in the group (for SUPERUSER, ADMIN, or no userId)
     const result = await pool.query(
-      `SELECT q.queue_id   AS "queueId",
-              q.queue_name AS "queueName"
+      `SELECT DISTINCT q.queue_id   AS "queueId",
+                       q.queue_name AS "queueName"
        FROM   ${rbacSchema}.group_queue gq
        JOIN   ${rbacSchema}.groups g
               ON g.group_id = gq.group_id
              AND g.is_active = TRUE
        JOIN   ${rbacSchema}.queue q
               ON q.queue_id = gq.queue_id
-       WHERE  gq.group_id = $1
+       WHERE  gq.group_id = ANY($1::bigint[])
        ORDER  BY q.queue_name`,
-      [groupId]
+      [groupIds]
     );
 
     return result.rows;
@@ -464,8 +499,15 @@ export const removeUserQueueModel = async ({ userId, queueId }) => {
  *
  * Per user:
  *   userId, userName, email, roleCode, roleName, departmentName,
- *   reportsToName, groupsAssigned (COUNT DISTINCT via user_group),
- *   isActive, lastLogin, totalCount (window fn — total rows before LIMIT).
+ *   reportsToName, isActive, lastLogin.
+ *
+ * groupsAssigned:
+ *   SUPERUSER → count of groups directly assigned to this superuser
+ *   USER      → count of groups assigned to their superuser (reports_to_user_id)
+ *
+ * queuesAssigned:
+ *   SUPERUSER → count of distinct queues via their directly assigned groups
+ *   USER      → count of queues directly assigned in queue_user
  *
  * @param {{ departmentId?: number }} options
  * @returns {Promise<object[]>}
@@ -490,28 +532,42 @@ export const getUsersOverviewModel = async ({ departmentId }) => {
         u.last_login_at      AS "lastLogin",
         u.reports_to_user_id AS "reportsToUserId",
 
-        -- SUPERUSER: own groups + reporting users' groups (DISTINCT)
-        -- USER:       own groups only
-        -- Role-gated so a demoted SUPERUSER loses inherited groups immediately.
-        (
-          SELECT COUNT(DISTINCT ug.group_id)
-          FROM ${rbacSchema}.user_group ug
-          JOIN ${rbacSchema}.app_user assigned_user
-            ON assigned_user.user_id = ug.user_id
-          WHERE
-            assigned_user.user_id = u.user_id
-            OR (
-              r.role_code = 'SUPERUSER'
-              AND assigned_user.reports_to_user_id = u.user_id
-            )
-        ) AS "groupsAssigned",
+        -- groupsAssigned:
+        --   SUPERUSER → direct groups on this superuser only
+        --   USER      → groups assigned to their superuser (reports_to_user_id)
+        --   GLOBAL_ADMIN → 0
+        CASE
+          WHEN r.role_code = 'SUPERUSER' THEN (
+            SELECT COUNT(DISTINCT ug.group_id)
+            FROM ${rbacSchema}.user_group ug
+            WHERE ug.user_id = u.user_id
+          )
+          WHEN r.role_code = 'USER' THEN (
+            SELECT COUNT(DISTINCT ug.group_id)
+            FROM ${rbacSchema}.user_group ug
+            WHERE ug.user_id = u.reports_to_user_id
+          )
+          ELSE 0
+        END AS "groupsAssigned",
 
-        -- Queues directly assigned to this user via queue_user
-        (
-          SELECT COUNT(DISTINCT qu.queue_id)
-          FROM ${rbacSchema}.queue_user qu
-          WHERE qu.user_id = u.user_id
-        ) AS "queuesAssigned"
+        -- queuesAssigned:
+        --   SUPERUSER → distinct queues via their directly assigned groups
+        --   USER      → queues directly assigned in queue_user
+        --   GLOBAL_ADMIN → 0
+        CASE
+          WHEN r.role_code = 'SUPERUSER' THEN (
+            SELECT COUNT(DISTINCT gq.queue_id)
+            FROM ${rbacSchema}.user_group ug
+            JOIN ${rbacSchema}.group_queue gq ON gq.group_id = ug.group_id
+            WHERE ug.user_id = u.user_id
+          )
+          WHEN r.role_code = 'USER' THEN (
+            SELECT COUNT(DISTINCT qu.queue_id)
+            FROM ${rbacSchema}.queue_user qu
+            WHERE qu.user_id = u.user_id
+          )
+          ELSE 0
+        END AS "queuesAssigned"
 
       FROM ${rbacSchema}.app_user u
 
@@ -605,7 +661,7 @@ export const getDepartmentSupervisorsModel = async () => {
  * Per group:
  *   groupId, groupName, groupDescription, departmentName,
  *   queuesAssigned (COUNT DISTINCT via group_queue),
- *   usersAssigned (COUNT DISTINCT via user_group),
+ *   usersAssigned  (SUPERUSER via user_group UNION normal USER via queue_user→group_queue),
  *   totalCount (window fn — total rows before LIMIT).
  *
  * @param {{ departmentId?: number }} options
@@ -624,16 +680,33 @@ export const getGroupsModel = async ({ departmentId }) => {
         g.department_id           AS "departmentId",
         d.department_name         AS "departmentName",
 
-        -- Count of queues assigned to this group
+        -- Count of queues assigned to this group (group_queue)
         COUNT(DISTINCT gq.queue_id) AS "queuesAssigned",
 
-        -- Count of users assigned to this group
-        COUNT(DISTINCT ug.user_id)  AS "usersAssigned"
+        -- Combined user count:
+        --   Superusers directly assigned this group (user_group)
+        --   + Normal users who have at least one queue from this group (queue_user → group_queue)
+        (
+          SELECT COUNT(DISTINCT combined.user_id)
+          FROM (
+            -- Superusers assigned to this group
+            SELECT ug.user_id
+            FROM ${rbacSchema}.user_group ug
+            WHERE ug.group_id = g.group_id
+
+            UNION
+
+            -- Normal users who have a queue belonging to this group
+            SELECT qu.user_id
+            FROM ${rbacSchema}.queue_user qu
+            JOIN ${rbacSchema}.group_queue gq2 ON gq2.queue_id = qu.queue_id
+            WHERE gq2.group_id = g.group_id
+          ) combined
+        ) AS "usersAssigned"
 
       FROM ${rbacSchema}.groups g
       JOIN ${rbacSchema}.department d ON d.department_id = g.department_id
       LEFT JOIN ${rbacSchema}.group_queue gq ON gq.group_id = g.group_id
-      LEFT JOIN ${rbacSchema}.user_group ug ON ug.group_id = g.group_id
       WHERE g.is_active = TRUE
       ${departmentId ? 'AND g.department_id = $1' : ''}
       GROUP BY
@@ -1249,7 +1322,7 @@ export const getUserDetailsModel = async (userId) => {
 
   const userInfo = userRes.rows[0];
 
-  // 3. Direct Reports (same for all roles)
+  // 2. Direct Reports (same for all roles)
   const reportsQuery = `
     SELECT
       u.user_id AS "userId",
@@ -1264,57 +1337,64 @@ export const getUserDetailsModel = async (userId) => {
   `;
   const reportsRes = await pool.query(reportsQuery, [userId]);
 
+  let inheritedGroups = [];
+
   if (userInfo.roleCode === 'USER') {
-    // USER: return directly assigned queues from queue_user
-    const queuesQuery = `
+    // USER: return their Superuser's groups, but only count queues directly assigned to this user
+    const groupsQuery = `
       SELECT
-        q.queue_id   AS "queueId",
-        q.queue_name AS "queueName"
-      FROM ${rbacSchema}.queue_user qu
-      JOIN ${rbacSchema}.queue q ON q.queue_id = qu.queue_id
-      WHERE qu.user_id = $1
-      ORDER BY q.queue_name
+        g.group_id AS "groupId",
+        g.group_name AS "groupName",
+        COUNT(DISTINCT qu.queue_id) AS "queuesCount"
+      FROM ${rbacSchema}.app_user u
+      JOIN ${rbacSchema}.user_group ug ON ug.user_id = u.reports_to_user_id
+      JOIN ${rbacSchema}.groups g ON g.group_id = ug.group_id
+      LEFT JOIN ${rbacSchema}.group_queue gq ON gq.group_id = g.group_id
+      LEFT JOIN ${rbacSchema}.queue_user qu 
+        ON qu.queue_id = gq.queue_id 
+       AND qu.user_id = u.user_id
+      WHERE u.user_id = $1
+        AND g.is_active = TRUE
+      GROUP BY g.group_id, g.group_name
+      ORDER BY g.group_name
     `;
-    const queuesRes = await pool.query(queuesQuery, [userId]);
+    const groupsRes = await pool.query(groupsQuery, [userId]);
+    inheritedGroups = groupsRes.rows.map(g => ({ ...g, queuesCount: Number(g.queuesCount) }));
 
-    return {
-      userInfo,
-      assignedQueues: queuesRes.rows,
-      directReports: reportsRes.rows,
-    };
+  } else {
+    // SUPERUSER / GLOBAL_ADMIN: return direct and inherited groups
+    const groupsQuery = `
+      WITH user_groups AS (
+        -- Direct groups
+        SELECT group_id FROM ${rbacSchema}.user_group WHERE user_id = $1
+        UNION
+        -- Inherited groups (only if user is SUPERUSER)
+        SELECT ug.group_id
+        FROM ${rbacSchema}.user_group ug
+        JOIN ${rbacSchema}.app_user sub ON sub.user_id = ug.user_id
+        JOIN ${rbacSchema}.app_user u ON u.user_id = $1
+        JOIN ${rbacSchema}.role r ON r.role_id = u.role_id
+        WHERE sub.reports_to_user_id = $1
+          AND r.role_code = 'SUPERUSER'
+      )
+      SELECT
+        g.group_id AS "groupId",
+        g.group_name AS "groupName",
+        COUNT(DISTINCT gq.queue_id) AS "queuesCount"
+      FROM user_groups ug
+      JOIN ${rbacSchema}.groups g ON g.group_id = ug.group_id
+      LEFT JOIN ${rbacSchema}.group_queue gq ON gq.group_id = g.group_id
+      WHERE g.is_active = TRUE
+      GROUP BY g.group_id, g.group_name
+      ORDER BY g.group_name
+    `;
+    const groupsRes = await pool.query(groupsQuery, [userId]);
+    inheritedGroups = groupsRes.rows.map(g => ({ ...g, queuesCount: Number(g.queuesCount) }));
   }
-
-  // SUPERUSER / GLOBAL_ADMIN: return inherited groups
-  const groupsQuery = `
-    WITH user_groups AS (
-      -- Direct groups
-      SELECT group_id FROM ${rbacSchema}.user_group WHERE user_id = $1
-      UNION
-      -- Inherited groups (only if user is SUPERUSER)
-      SELECT ug.group_id
-      FROM ${rbacSchema}.user_group ug
-      JOIN ${rbacSchema}.app_user sub ON sub.user_id = ug.user_id
-      JOIN ${rbacSchema}.app_user u ON u.user_id = $1
-      JOIN ${rbacSchema}.role r ON r.role_id = u.role_id
-      WHERE sub.reports_to_user_id = $1
-        AND r.role_code = 'SUPERUSER'
-    )
-    SELECT
-      g.group_id AS "groupId",
-      g.group_name AS "groupName",
-      COUNT(DISTINCT gq.queue_id) AS "queuesCount"
-    FROM user_groups ug
-    JOIN ${rbacSchema}.groups g ON g.group_id = ug.group_id
-    LEFT JOIN ${rbacSchema}.group_queue gq ON gq.group_id = g.group_id
-    WHERE g.is_active = TRUE
-    GROUP BY g.group_id, g.group_name
-    ORDER BY g.group_name
-  `;
-  const groupsRes = await pool.query(groupsQuery, [userId]);
 
   return {
     userInfo,
-    inheritedGroups: groupsRes.rows.map(g => ({ ...g, queuesCount: Number(g.queuesCount) })),
+    inheritedGroups,
     directReports: reportsRes.rows,
   };
 };
