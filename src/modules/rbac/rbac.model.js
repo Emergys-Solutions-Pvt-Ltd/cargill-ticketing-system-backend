@@ -256,7 +256,7 @@ export const addUserModel = async ({ roleCode, userName, email, phoneNo, departm
           assignedQueueIds.map((id) => ({ queue_id: id }))
         );
         await client.query(
-          `INSERT INTO ${rbacSchema}.queue_user (user_id, queue_id, assigned_by, assigned_at)
+          `INSERT INTO ${rbacSchema}.user_queue (user_id, queue_id, assigned_by, assigned_at)
            SELECT $1, q.queue_id, $2, CURRENT_TIMESTAMP
            FROM jsonb_to_recordset($3::jsonb) AS q(queue_id BIGINT)
            ON CONFLICT (user_id, queue_id) DO NOTHING`,
@@ -433,7 +433,7 @@ export const getQueuesModel = async ({ groupId, departmentId, userId }) => {
            FROM   ${rbacSchema}.group_queue gq
            JOIN   ${rbacSchema}.groups g ON g.group_id = gq.group_id AND g.is_active = TRUE
            JOIN   ${rbacSchema}.queue q ON q.queue_id = gq.queue_id
-           JOIN   ${rbacSchema}.queue_user qu ON qu.queue_id = gq.queue_id AND qu.user_id = $2
+           JOIN   ${rbacSchema}.user_queue qu ON qu.queue_id = gq.queue_id AND qu.user_id = $2
            WHERE  gq.group_id = ANY($1::bigint[])
            ORDER  BY q.queue_name`,
           [groupIds, userId]
@@ -507,7 +507,7 @@ export const removeUserQueueModel = async ({ userId, queueId }) => {
  *
  * queuesAssigned:
  *   SUPERUSER → count of distinct queues via their directly assigned groups
- *   USER      → count of queues directly assigned in queue_user
+ *   USER      → count of queues directly assigned in user_queue
  *
  * @param {{ departmentId?: number }} options
  * @returns {Promise<object[]>}
@@ -552,7 +552,7 @@ export const getUsersOverviewModel = async ({ departmentId }) => {
 
         -- queuesAssigned:
         --   SUPERUSER → distinct queues via their directly assigned groups
-        --   USER      → queues directly assigned in queue_user
+        --   USER      → queues directly assigned in user_queue
         --   GLOBAL_ADMIN → 0
         CASE
           WHEN r.role_code = 'SUPERUSER' THEN (
@@ -563,7 +563,7 @@ export const getUsersOverviewModel = async ({ departmentId }) => {
           )
           WHEN r.role_code = 'USER' THEN (
             SELECT COUNT(DISTINCT qu.queue_id)
-            FROM ${rbacSchema}.queue_user qu
+            FROM ${rbacSchema}.user_queue qu
             WHERE qu.user_id = u.user_id
           )
           ELSE 0
@@ -661,7 +661,7 @@ export const getDepartmentSupervisorsModel = async () => {
  * Per group:
  *   groupId, groupName, groupDescription, departmentName,
  *   queuesAssigned (COUNT DISTINCT via group_queue),
- *   usersAssigned  (SUPERUSER via user_group UNION normal USER via queue_user→group_queue),
+ *   usersAssigned  (SUPERUSER via user_group UNION normal USER via user_queue →group_queue),
  *   totalCount (window fn — total rows before LIMIT).
  *
  * @param {{ departmentId?: number }} options
@@ -685,7 +685,7 @@ export const getGroupsModel = async ({ departmentId }) => {
 
         -- Combined user count:
         --   Superusers directly assigned this group (user_group)
-        --   + Normal users who have at least one queue from this group (queue_user → group_queue)
+        --   + Normal users who have at least one queue from this group (user_queue → group_queue)
         (
           SELECT COUNT(DISTINCT combined.user_id)
           FROM (
@@ -698,7 +698,7 @@ export const getGroupsModel = async ({ departmentId }) => {
 
             -- Normal users who have a queue belonging to this group
             SELECT qu.user_id
-            FROM ${rbacSchema}.queue_user qu
+            FROM ${rbacSchema}.user_queue qu
             JOIN ${rbacSchema}.group_queue gq2 ON gq2.queue_id = qu.queue_id
             WHERE gq2.group_id = g.group_id
           ) combined
@@ -974,10 +974,10 @@ export const removeGroupsFromUserModel = async ({ userId, groupIds }) => {
       [userId, groupIds]
     );
 
-    // 4. Cascade: remove those queues from queue_user for all users reporting to this Superuser
+    // 4. Cascade: remove those queues from user_queue for all users reporting to this Superuser
     if (queueIds.length > 0) {
       await client.query(
-        `DELETE FROM ${rbacSchema}.queue_user qu
+        `DELETE FROM ${rbacSchema}.user_queue qu
          USING ${rbacSchema}.app_user u
          WHERE qu.user_id = u.user_id
            AND u.reports_to_user_id = $1
@@ -1189,9 +1189,9 @@ export const removeQueuesFromGroupModel = async ({ groupId, queueIds }) => {
       [groupId, queueIds]
     );
 
-    // 3. Cascade: remove same queues from queue_user for any user who had them directly assigned
+    // 3. Cascade: remove same queues from user_queue for any user who had them directly assigned
     await client.query(
-      `DELETE FROM ${rbacSchema}.queue_user
+      `DELETE FROM ${rbacSchema}.user_queue
        WHERE queue_id = ANY($1::bigint[])`,
       [queueIds]
     );
@@ -1350,7 +1350,7 @@ export const getUserDetailsModel = async (userId) => {
       JOIN ${rbacSchema}.user_group ug ON ug.user_id = u.reports_to_user_id
       JOIN ${rbacSchema}.groups g ON g.group_id = ug.group_id
       LEFT JOIN ${rbacSchema}.group_queue gq ON gq.group_id = g.group_id
-      LEFT JOIN ${rbacSchema}.queue_user qu 
+      LEFT JOIN ${rbacSchema}.user_queue qu 
         ON qu.queue_id = gq.queue_id 
        AND qu.user_id = u.user_id
       WHERE u.user_id = $1
@@ -1458,7 +1458,7 @@ export const assignQueuesToUserModel = async ({ userId, queueIds, assignedBy }) 
 
     // 3. Insert — skip duplicates
     const result = await client.query(
-      `INSERT INTO ${rbacSchema}.queue_user (user_id, queue_id, assigned_by, assigned_at)
+      `INSERT INTO ${rbacSchema}.user_queue (user_id, queue_id, assigned_by, assigned_at)
        SELECT $1, selected.queue_id, $2, CURRENT_TIMESTAMP
        FROM unnest($3::bigint[]) AS selected(queue_id)
        ON CONFLICT (user_id, queue_id) DO NOTHING`,
@@ -1477,7 +1477,7 @@ export const assignQueuesToUserModel = async ({ userId, queueIds, assignedBy }) 
 };
 
 /**
- * Removes direct queue assignments from a USER (from queue_user table).
+ * Removes direct queue assignments from a USER (from user_queue table).
  *
  * @param {{ userId: number, queueIds: number[] }} params
  * @returns {Promise<{ deleted: number } | { error: string }>}
@@ -1494,7 +1494,7 @@ export const removeQueuesFromUserModel = async ({ userId, queueIds }) => {
   if (!userResult.rows[0]) return { error: "USER_NOT_FOUND" };
 
   const result = await pool.query(
-    `DELETE FROM ${rbacSchema}.queue_user
+    `DELETE FROM ${rbacSchema}.user_queue
      WHERE user_id  = $1
        AND queue_id = ANY($2::bigint[])`,
     [userId, queueIds]

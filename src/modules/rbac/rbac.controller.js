@@ -42,7 +42,7 @@ export const addUser = asyncWrapper(async (req, res) => {
     departmentId,
     reportsToUserId,
     assignedGroupIds = [],  // all roles: accepted in body; SUPERUSER → DB insert, USER → ignored
-    assignedQueueIds = [],  // USER only → inserted into queue_user
+    assignedQueueIds = [],  // USER only → inserted into user_queue
   } = req.body ?? {};
 
   const createdBy = req.user?.userId || 1;
