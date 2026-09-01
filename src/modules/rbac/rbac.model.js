@@ -177,7 +177,7 @@ export const getDepartmentStatsModel = async (departmentId = null) => {
 //   return result.rows;
 // };
 
-export const addUserModel = async ({ roleCode, userName, email, phoneNo, departmentId, reportsToUserId, assignedGroupIds = [], createdBy }) => {
+export const addUserModel = async ({ roleCode, userName, email, phoneNo, departmentId, reportsToUserId, assignedGroupIds = [], assignedQueueIds = [], createdBy }) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
   const client = await pool.connect();
@@ -206,7 +206,7 @@ export const addUserModel = async ({ roleCode, userName, email, phoneNo, departm
     }
     const roleId = roleResult.rows[0].role_id;
 
-    // 3. Insert user — RETURNING user_id for group assignment
+    // 3. Insert user — RETURNING user_id for group/queue assignment
     const insertResult = await client.query(
       `INSERT INTO ${rbacSchema}.app_user
          (user_name, email, phone_no, role_id, department_id, reports_to_user_id, is_active, created_by, created_at)
@@ -216,19 +216,53 @@ export const addUserModel = async ({ roleCode, userName, email, phoneNo, departm
     );
     const userId = insertResult.rows[0].user_id;
 
-    // 4. Group assignment — if any group IDs provided
-    if (assignedGroupIds.length > 0) {
-      // jsonb_to_recordset: pass array of {group_id} objects as JSONB
-      const groupsJson = JSON.stringify(
-        assignedGroupIds.map((id) => ({ group_id: id }))
-      );
+    if (roleCode === 'SUPERUSER') {
+      // 4a. SUPERUSER: assign groups if provided
+      if (assignedGroupIds.length > 0) {
+        const groupsJson = JSON.stringify(
+          assignedGroupIds.map((id) => ({ group_id: id }))
+        );
+        await client.query(
+          `INSERT INTO ${rbacSchema}.user_group (user_id, group_id, assigned_by, assigned_at)
+           SELECT $1, g.group_id, $2, CURRENT_TIMESTAMP
+           FROM jsonb_to_recordset($3::jsonb) AS g(group_id BIGINT)
+           ON CONFLICT (user_id, group_id) DO NOTHING`,
+          [userId, createdBy, groupsJson]
+        );
+      }
+    } else if (roleCode === 'USER') {
+      // 4b. USER: assign queues if provided — must belong to Superuser's group pool
+      if (assignedQueueIds.length > 0) {
+        if (!reportsToUserId) {
+          await client.query("ROLLBACK");
+          return { error: "SUPERUSER_REQUIRED_FOR_QUEUE_ASSIGN" };
+        }
 
-      await client.query(
-        `INSERT INTO ${rbacSchema}.user_group (user_id, group_id, assigned_by, assigned_at)
-         SELECT $1, g.group_id, $2, CURRENT_TIMESTAMP
-         FROM jsonb_to_recordset($3::jsonb) AS g(group_id BIGINT)`,
-        [userId, createdBy, groupsJson]
-      );
+        // Validate queues are accessible via the Superuser's groups
+        const validQueues = await client.query(
+          `SELECT DISTINCT gq.queue_id
+           FROM ${rbacSchema}.user_group ug
+           JOIN ${rbacSchema}.group_queue gq ON gq.group_id = ug.group_id
+           WHERE ug.user_id = $1
+             AND gq.queue_id = ANY($2::bigint[])`,
+          [reportsToUserId, assignedQueueIds]
+        );
+        if (validQueues.rows.length !== assignedQueueIds.length) {
+          await client.query("ROLLBACK");
+          return { error: "INVALID_QUEUES_FOR_USER" };
+        }
+
+        const queuesJson = JSON.stringify(
+          assignedQueueIds.map((id) => ({ queue_id: id }))
+        );
+        await client.query(
+          `INSERT INTO ${rbacSchema}.queue_user (user_id, queue_id, assigned_by, assigned_at)
+           SELECT $1, q.queue_id, $2, CURRENT_TIMESTAMP
+           FROM jsonb_to_recordset($3::jsonb) AS q(queue_id BIGINT)
+           ON CONFLICT (user_id, queue_id) DO NOTHING`,
+          [userId, createdBy, queuesJson]
+        );
+      }
     }
 
     await client.query("COMMIT");
@@ -470,7 +504,14 @@ export const getUsersOverviewModel = async ({ departmentId }) => {
               r.role_code = 'SUPERUSER'
               AND assigned_user.reports_to_user_id = u.user_id
             )
-        ) AS "groupsAssigned"
+        ) AS "groupsAssigned",
+
+        -- Queues directly assigned to this user via queue_user
+        (
+          SELECT COUNT(DISTINCT qu.queue_id)
+          FROM ${rbacSchema}.queue_user qu
+          WHERE qu.user_id = u.user_id
+        ) AS "queuesAssigned"
 
       FROM ${rbacSchema}.app_user u
 
@@ -764,11 +805,13 @@ export const assignGroupsToUserModel = async ({ userId, groupIds, assignedBy }) 
   try {
     await client.query("BEGIN");
 
+    // 1. Fetch user — must exist, be active, and be SUPERUSER
     const userResult = await client.query(
-      `SELECT user_id, department_id, reports_to_user_id
-       FROM ${rbacSchema}.app_user
-       WHERE user_id = $1
-         AND is_active = TRUE
+      `SELECT u.user_id, u.department_id, r.role_code
+       FROM ${rbacSchema}.app_user u
+       JOIN ${rbacSchema}.role r ON r.role_id = u.role_id
+       WHERE u.user_id = $1
+         AND u.is_active = TRUE
        LIMIT 1`,
       [userId]
     );
@@ -777,7 +820,13 @@ export const assignGroupsToUserModel = async ({ userId, groupIds, assignedBy }) 
       await client.query("ROLLBACK");
       return { error: "USER_NOT_FOUND" };
     }
+    // Groups can only be assigned to SUPERUSERs
+    if (user.role_code !== 'SUPERUSER') {
+      await client.query("ROLLBACK");
+      return { error: "NOT_SUPERUSER" };
+    }
 
+    // 2. Validate groups belong to same department and are active
     const groupsResult = await client.query(
       `SELECT group_id
        FROM ${rbacSchema}.groups
@@ -791,6 +840,7 @@ export const assignGroupsToUserModel = async ({ userId, groupIds, assignedBy }) 
       return { error: "INVALID_GROUPS" };
     }
 
+    // 3. Insert — skip duplicates
     const result = await client.query(
       `INSERT INTO ${rbacSchema}.user_group (user_id, group_id, assigned_by, assigned_at)
        SELECT $1, selected.group_id, $2, CURRENT_TIMESTAMP
@@ -819,21 +869,59 @@ export const assignGroupsToUserModel = async ({ userId, groupIds, assignedBy }) 
 export const removeGroupsFromUserModel = async ({ userId, groupIds }) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
+  const client = await pool.connect();
 
-  const userResult = await pool.query(
-    `SELECT user_id FROM ${rbacSchema}.app_user WHERE user_id = $1 AND is_active = TRUE LIMIT 1`,
-    [userId]
-  );
-  if (!userResult.rows[0]) return { error: "USER_NOT_FOUND" };
+  try {
+    await client.query("BEGIN");
 
-  const result = await pool.query(
-    `DELETE FROM ${rbacSchema}.user_group
-     WHERE user_id = $1
-       AND group_id = ANY($2::bigint[])`,
-    [userId, groupIds]
-  );
+    // 1. Validate Superuser exists
+    const userResult = await client.query(
+      `SELECT user_id FROM ${rbacSchema}.app_user WHERE user_id = $1 AND is_active = TRUE LIMIT 1`,
+      [userId]
+    );
+    if (!userResult.rows[0]) {
+      await client.query("ROLLBACK");
+      return { error: "USER_NOT_FOUND" };
+    }
 
-  return { deleted: result.rowCount };
+    // 2. Find queue_ids in the removed groups — needed for cascade
+    const queueRes = await client.query(
+      `SELECT DISTINCT gq.queue_id
+       FROM ${rbacSchema}.group_queue gq
+       WHERE gq.group_id = ANY($1::bigint[])`,
+      [groupIds]
+    );
+    const queueIds = queueRes.rows.map(r => r.queue_id);
+
+    // 3. Delete from user_group
+    const result = await client.query(
+      `DELETE FROM ${rbacSchema}.user_group
+       WHERE user_id = $1
+         AND group_id = ANY($2::bigint[])`,
+      [userId, groupIds]
+    );
+
+    // 4. Cascade: remove those queues from queue_user for all users reporting to this Superuser
+    if (queueIds.length > 0) {
+      await client.query(
+        `DELETE FROM ${rbacSchema}.queue_user qu
+         USING ${rbacSchema}.app_user u
+         WHERE qu.user_id = u.user_id
+           AND u.reports_to_user_id = $1
+           AND qu.queue_id = ANY($2::bigint[])`,
+        [userId, queueIds]
+      );
+    }
+
+    await client.query("COMMIT");
+    return { deleted: result.rowCount };
+
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 };
 
 /**
@@ -1005,24 +1093,45 @@ export const getGroupDetailsModel = async ({ groupIds }) => {
 export const removeQueuesFromGroupModel = async ({ groupId, queueIds }) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
+  const client = await pool.connect();
 
-  // Validate group exists
-  const groupCheck = await pool.query(
-    `SELECT group_id FROM ${rbacSchema}.groups WHERE group_id = $1 AND is_active = TRUE LIMIT 1`,
-    [groupId]
-  );
-  if (!groupCheck.rows[0]) {
-    return { error: "GROUP_NOT_FOUND" };
+  try {
+    await client.query("BEGIN");
+
+    // 1. Validate group exists
+    const groupCheck = await client.query(
+      `SELECT group_id FROM ${rbacSchema}.groups WHERE group_id = $1 AND is_active = TRUE LIMIT 1`,
+      [groupId]
+    );
+    if (!groupCheck.rows[0]) {
+      await client.query("ROLLBACK");
+      return { error: "GROUP_NOT_FOUND" };
+    }
+
+    // 2. Delete from group_queue
+    const result = await client.query(
+      `DELETE FROM ${rbacSchema}.group_queue
+       WHERE  group_id  = $1
+         AND  queue_id  = ANY($2::bigint[])`,
+      [groupId, queueIds]
+    );
+
+    // 3. Cascade: remove same queues from queue_user for any user who had them directly assigned
+    await client.query(
+      `DELETE FROM ${rbacSchema}.queue_user
+       WHERE queue_id = ANY($1::bigint[])`,
+      [queueIds]
+    );
+
+    await client.query("COMMIT");
+    return { deleted: result.rowCount };
+
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
-
-  const result = await pool.query(
-    `DELETE FROM ${rbacSchema}.group_queue
-     WHERE  group_id  = $1
-       AND  queue_id  = ANY($2::bigint[])`,
-    [groupId, queueIds]
-  );
-
-  return { deleted: result.rowCount };
 };
 
 /**
@@ -1140,7 +1249,42 @@ export const getUserDetailsModel = async (userId) => {
 
   const userInfo = userRes.rows[0];
 
-  // 2. Groups (Direct + Inherited if SUPERUSER)
+  // 3. Direct Reports (same for all roles)
+  const reportsQuery = `
+    SELECT
+      u.user_id AS "userId",
+      u.user_name AS "userName",
+      u.email,
+      r.role_name AS "roleName"
+    FROM ${rbacSchema}.app_user u
+    JOIN ${rbacSchema}.role r ON r.role_id = u.role_id
+    WHERE u.reports_to_user_id = $1
+      AND u.is_active = TRUE
+    ORDER BY u.user_name
+  `;
+  const reportsRes = await pool.query(reportsQuery, [userId]);
+
+  if (userInfo.roleCode === 'USER') {
+    // USER: return directly assigned queues from queue_user
+    const queuesQuery = `
+      SELECT
+        q.queue_id   AS "queueId",
+        q.queue_name AS "queueName"
+      FROM ${rbacSchema}.queue_user qu
+      JOIN ${rbacSchema}.queue q ON q.queue_id = qu.queue_id
+      WHERE qu.user_id = $1
+      ORDER BY q.queue_name
+    `;
+    const queuesRes = await pool.query(queuesQuery, [userId]);
+
+    return {
+      userInfo,
+      assignedQueues: queuesRes.rows,
+      directReports: reportsRes.rows,
+    };
+  }
+
+  // SUPERUSER / GLOBAL_ADMIN: return inherited groups
   const groupsQuery = `
     WITH user_groups AS (
       -- Direct groups
@@ -1168,24 +1312,113 @@ export const getUserDetailsModel = async (userId) => {
   `;
   const groupsRes = await pool.query(groupsQuery, [userId]);
 
-  // 3. Direct Reports
-  const reportsQuery = `
-    SELECT
-      u.user_id AS "userId",
-      u.user_name AS "userName",
-      u.email,
-      r.role_name AS "roleName"
-    FROM ${rbacSchema}.app_user u
-    JOIN ${rbacSchema}.role r ON r.role_id = u.role_id
-    WHERE u.reports_to_user_id = $1
-      AND u.is_active = TRUE
-    ORDER BY u.user_name
-  `;
-  const reportsRes = await pool.query(reportsQuery, [userId]);
-
   return {
     userInfo,
     inheritedGroups: groupsRes.rows.map(g => ({ ...g, queuesCount: Number(g.queuesCount) })),
-    directReports: reportsRes.rows
+    directReports: reportsRes.rows,
   };
+};
+
+/**
+ * Assigns specific queues directly to a USER from the pool of queues
+ * accessible via their Superuser's groups.
+ *
+ * Validates:
+ *   - User exists, is active, has role USER
+ *   - User has a reportsToUserId (Superuser)
+ *   - All requested queueIds exist in the Superuser's group pool
+ *
+ * @param {{ userId: number, queueIds: number[], assignedBy: number }} params
+ * @returns {Promise<{ inserted: number } | { error: string }>}
+ */
+export const assignQueuesToUserModel = async ({ userId, queueIds, assignedBy }) => {
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    // 1. Fetch user — must be active USER with a Superuser
+    const userResult = await client.query(
+      `SELECT u.user_id, u.reports_to_user_id, r.role_code
+       FROM ${rbacSchema}.app_user u
+       JOIN ${rbacSchema}.role r ON r.role_id = u.role_id
+       WHERE u.user_id = $1 AND u.is_active = TRUE
+       LIMIT 1`,
+      [userId]
+    );
+    const user = userResult.rows[0];
+    if (!user) {
+      await client.query("ROLLBACK");
+      return { error: "USER_NOT_FOUND" };
+    }
+    if (user.role_code !== 'USER') {
+      await client.query("ROLLBACK");
+      return { error: "NOT_REGULAR_USER" };
+    }
+    if (!user.reports_to_user_id) {
+      await client.query("ROLLBACK");
+      return { error: "SUPERUSER_REQUIRED_FOR_QUEUE_ASSIGN" };
+    }
+
+    // 2. Validate all queueIds belong to the Superuser's group pool
+    const validQueues = await client.query(
+      `SELECT DISTINCT gq.queue_id
+       FROM ${rbacSchema}.user_group ug
+       JOIN ${rbacSchema}.group_queue gq ON gq.group_id = ug.group_id
+       WHERE ug.user_id = $1
+         AND gq.queue_id = ANY($2::bigint[])`,
+      [user.reports_to_user_id, queueIds]
+    );
+    if (validQueues.rows.length !== queueIds.length) {
+      await client.query("ROLLBACK");
+      return { error: "INVALID_QUEUES_FOR_USER" };
+    }
+
+    // 3. Insert — skip duplicates
+    const result = await client.query(
+      `INSERT INTO ${rbacSchema}.queue_user (user_id, queue_id, assigned_by, assigned_at)
+       SELECT $1, selected.queue_id, $2, CURRENT_TIMESTAMP
+       FROM unnest($3::bigint[]) AS selected(queue_id)
+       ON CONFLICT (user_id, queue_id) DO NOTHING`,
+      [userId, assignedBy, queueIds]
+    );
+
+    await client.query("COMMIT");
+    return { inserted: result.rowCount };
+
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Removes direct queue assignments from a USER (from queue_user table).
+ *
+ * @param {{ userId: number, queueIds: number[] }} params
+ * @returns {Promise<{ deleted: number } | { error: string }>}
+ */
+export const removeQueuesFromUserModel = async ({ userId, queueIds }) => {
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+
+  // Validate user exists
+  const userResult = await pool.query(
+    `SELECT user_id FROM ${rbacSchema}.app_user WHERE user_id = $1 AND is_active = TRUE LIMIT 1`,
+    [userId]
+  );
+  if (!userResult.rows[0]) return { error: "USER_NOT_FOUND" };
+
+  const result = await pool.query(
+    `DELETE FROM ${rbacSchema}.queue_user
+     WHERE user_id  = $1
+       AND queue_id = ANY($2::bigint[])`,
+    [userId, queueIds]
+  );
+
+  return { deleted: result.rowCount };
 };

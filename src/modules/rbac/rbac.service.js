@@ -1,4 +1,4 @@
-import { getDepartmentStatsModel, addUserModel, toggleUserStatusModel, getQueuesModel, getUsersOverviewModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel, assignGroupsToUserModel, removeGroupsFromUserModel, editUserModel, getGroupDetailsModel, removeQueuesFromGroupModel, editGroupModel, getUserDetailsModel } from "./rbac.model.js";
+import { getDepartmentStatsModel, addUserModel, toggleUserStatusModel, getQueuesModel, getUsersOverviewModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel, assignGroupsToUserModel, removeGroupsFromUserModel, editUserModel, getGroupDetailsModel, removeQueuesFromGroupModel, editGroupModel, getUserDetailsModel, assignQueuesToUserModel, removeQueuesFromUserModel } from "./rbac.model.js";
 import { getConfig } from "../../config/env.config.js";
 
 /**
@@ -95,8 +95,8 @@ export const getDepartmentStatsService = async (departmentId = null) => {
  * @param {{ roleCode, userName, email, phoneNo?, departmentId, reportsToUserId?, assignedGroupIds?, createdBy? }} data
  * @returns {Promise<{ userId: number } | { error: string }>}
  */
-export const addUserService = async ({ roleCode, userName, email, phoneNo, departmentId, reportsToUserId, assignedGroupIds = [], createdBy }) => {
-  return addUserModel({ roleCode, userName, email, phoneNo, departmentId, reportsToUserId, assignedGroupIds, createdBy });
+export const addUserService = async ({ roleCode, userName, email, phoneNo, departmentId, reportsToUserId, assignedGroupIds = [], assignedQueueIds = [], createdBy }) => {
+  return addUserModel({ roleCode, userName, email, phoneNo, departmentId, reportsToUserId, assignedGroupIds, assignedQueueIds, createdBy });
 };
 
 /**
@@ -146,6 +146,7 @@ export const getUsersOverviewService = async ({ departmentId } = {}) => {
     reportsToUserId: u.reportsToUserId ?? null,
     reportsToUserName: u.reportsToUserName ?? null,
     groupsAssigned: Number(u.groupsAssigned),
+    queuesAssigned: Number(u.queuesAssigned),
     isActive: u.isActive,
     lastLogin: u.lastLogin ?? null,
   }));
@@ -310,4 +311,27 @@ export const getUserDetailsService = async (userId) => {
  */
 export const removeGroupsFromUserService = async ({ userId, groupIds }) => {
   return removeGroupsFromUserModel({ userId, groupIds });
+};
+
+/**
+ * Assigns specific queues directly to a USER.
+ * Validates user is a regular USER with a Superuser, and queues belong to Superuser's pool.
+ *
+ * @param {{ userId: number, queueIds: number[], assignedBy: number }} data
+ * @returns {Promise<{ inserted: number } | { error: string }>}
+ */
+export const assignQueuesToUserService = async ({ userId, queueIds, assignedBy }) => {
+  const uniqueQueueIds = [...new Set(queueIds)];
+  return assignQueuesToUserModel({ userId, queueIds: uniqueQueueIds, assignedBy });
+};
+
+/**
+ * Removes direct queue assignments from a USER.
+ *
+ * @param {{ userId: number, queueIds: number[] }} params
+ * @returns {Promise<{ deleted: number } | { error: string }>}
+ */
+export const removeQueuesFromUserService = async ({ userId, queueIds }) => {
+  const uniqueQueueIds = [...new Set(queueIds)];
+  return removeQueuesFromUserModel({ userId, queueIds: uniqueQueueIds });
 };

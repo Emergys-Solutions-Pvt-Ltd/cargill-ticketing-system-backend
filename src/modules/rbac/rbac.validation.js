@@ -16,7 +16,12 @@ export const addUserSchema = Joi.object({
   phoneNo: Joi.string().trim().optional().allow(""),
   departmentId: Joi.number().integer().positive().required(),
   reportsToUserId: Joi.number().integer().positive().optional(),
+  // Accepted for all roles in body.
+  // SUPERUSER → inserted into user_group.
+  // USER      → accepted but not used (reserved for future).
   assignedGroupIds: Joi.array().items(Joi.number().integer().positive()).optional(),
+  // USER only — assigned queues from Superuser's group pool.
+  assignedQueueIds: Joi.array().items(Joi.number().integer().positive()).optional(),
 });
 
 export const toggleUserStatusSchema = Joi.object({
@@ -93,4 +98,14 @@ export const getUserDetailsSchema = Joi.object({
 export const removeGroupsFromUserSchema = Joi.object({
   userId: Joi.number().integer().positive().required(),
   groupIds: Joi.array().items(Joi.number().integer().positive()).min(1).required(),
+});
+
+export const assignQueuesToUserSchema = Joi.object({
+  userId: Joi.number().integer().positive().required(),
+  queueIds: Joi.array().items(Joi.number().integer().positive()).min(1).required(),
+});
+
+export const removeQueuesFromUserSchema = Joi.object({
+  userId: Joi.number().integer().positive().required(),
+  queueIds: Joi.array().items(Joi.number().integer().positive()).min(1).required(),
 });

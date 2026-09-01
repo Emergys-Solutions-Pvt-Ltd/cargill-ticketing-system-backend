@@ -1,4 +1,4 @@
-import { getDepartmentStatsService, addUserService, toggleUserStatusService, getQueuesService, getUsersOverviewService, getGroupsService, addGroupService, assignQueuesToGroupService, assignGroupsToUserService, removeGroupsFromUserService, editUserService, getGroupDetailsService, removeQueuesFromGroupService, editGroupService, getUserDetailsService } from "./rbac.service.js";
+import { getDepartmentStatsService, addUserService, toggleUserStatusService, getQueuesService, getUsersOverviewService, getGroupsService, addGroupService, assignQueuesToGroupService, assignGroupsToUserService, removeGroupsFromUserService, editUserService, getGroupDetailsService, removeQueuesFromGroupService, editGroupService, getUserDetailsService, assignQueuesToUserService, removeQueuesFromUserService } from "./rbac.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
 import asyncWrapper from "../../utils/asyncWrapper.js";
 
@@ -41,18 +41,21 @@ export const addUser = asyncWrapper(async (req, res) => {
     phoneNo,
     departmentId,
     reportsToUserId,
-    assignedGroupIds = [],  // array of group IDs
+    assignedGroupIds = [],  // all roles: accepted in body; SUPERUSER → DB insert, USER → ignored
+    assignedQueueIds = [],  // USER only → inserted into queue_user
   } = req.body ?? {};
 
   const createdBy = req.user?.userId || 1;
 
   const result = await addUserService({
     roleCode, userName, email, phoneNo, departmentId,
-    reportsToUserId, assignedGroupIds, createdBy,
+    reportsToUserId, assignedGroupIds, assignedQueueIds, createdBy,
   });
 
   if (result?.error === "EMAIL_EXISTS") return res.sendResponse(MESSAGES.userAlreadyExists);
   if (result?.error === "INVALID_ROLE") return res.sendResponse(MESSAGES.validationError);
+  if (result?.error === "INVALID_QUEUES_FOR_USER") return res.sendResponse(MESSAGES.invalidQueuesForUser);
+  if (result?.error === "SUPERUSER_REQUIRED_FOR_QUEUE_ASSIGN") return res.sendResponse(MESSAGES.validationError);
 
   return res.sendResponse(MESSAGES.userAdded, { userId: result.userId });
 });
@@ -174,6 +177,7 @@ export const assignGroupsToUser = asyncWrapper(async (req, res) => {
   const result = await assignGroupsToUserService({ userId, groupIds, assignedBy });
 
   if (result?.error === "USER_NOT_FOUND") return res.sendResponse(MESSAGES.userNotFound);
+  if (result?.error === "NOT_SUPERUSER") return res.sendResponse(MESSAGES.notSuperuser);
   if (result?.error === "INVALID_GROUPS") return res.sendResponse(MESSAGES.invalidGroups);
 
   return res.sendResponse(MESSAGES.groupsAssignedToUser, { inserted: result.inserted });
@@ -306,4 +310,41 @@ export const removeGroupsFromUser = asyncWrapper(async (req, res) => {
   }
 
   return res.sendResponse(MESSAGES.groupsRemovedFromUser, { deleted: result.deleted });
+});
+
+/**
+ * POST /api/v1/rbac/assign-queues-to-user
+ * Body: { userId: number, queueIds: number[] }
+ * Assigns specific queues (from Superuser's pool) directly to a regular USER.
+ * Only callable by Global Admin.
+ */
+export const assignQueuesToUser = asyncWrapper(async (req, res) => {
+  const { userId, queueIds = [] } = req.body ?? {};
+
+  const assignedBy = req.user?.userId || 1;
+  const result = await assignQueuesToUserService({ userId, queueIds, assignedBy });
+
+  if (result?.error === "USER_NOT_FOUND") return res.sendResponse(MESSAGES.userNotFound);
+  if (result?.error === "NOT_REGULAR_USER") return res.sendResponse(MESSAGES.validationError);
+  if (result?.error === "SUPERUSER_REQUIRED_FOR_QUEUE_ASSIGN") return res.sendResponse(MESSAGES.validationError);
+  if (result?.error === "INVALID_QUEUES_FOR_USER") return res.sendResponse(MESSAGES.invalidQueuesForUser);
+
+  return res.sendResponse(MESSAGES.queuesAssignedToUser, { inserted: result.inserted });
+});
+
+/**
+ * POST /api/v1/rbac/remove-queues-from-user
+ * Body: { userId: number, queueIds: number[] }
+ * Removes direct queue assignments from a user.
+ */
+export const removeQueuesFromUser = asyncWrapper(async (req, res) => {
+  const { userId, queueIds } = req.body ?? {};
+
+  const result = await removeQueuesFromUserService({ userId, queueIds });
+
+  if (result?.error === "USER_NOT_FOUND") {
+    return res.sendResponse(MESSAGES.userNotFound);
+  }
+
+  return res.sendResponse(MESSAGES.queuesRemovedFromUser, { deleted: result.deleted });
 });

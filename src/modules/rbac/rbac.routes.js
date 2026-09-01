@@ -1,12 +1,13 @@
 import express from "express";
-import { getDepartments, addUser, toggleUserStatus, getQueues, getUsers, getGroups, addGroup, addQueuesToGroup, assignGroupsToUser, removeGroupsFromUser, editUser, getGroupDetails, removeQueuesFromGroup, editGroup, getUserDetails } from "./rbac.controller.js";
+import { getDepartments, addUser, toggleUserStatus, getQueues, getUsers, getGroups, addGroup, addQueuesToGroup, assignGroupsToUser, removeGroupsFromUser, editUser, getGroupDetails, removeQueuesFromGroup, editGroup, getUserDetails, assignQueuesToUser, removeQueuesFromUser } from "./rbac.controller.js";
 import { authenticateJwt } from "../../middlewares/auth.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import {
   getDepartmentsSchema, addUserSchema, toggleUserStatusSchema,
   getQueuesSchema, getUsersSchema, getGroupsSchema, addGroupSchema,
   addQueuesToGroupSchema, assignGroupsToUserSchema, editUserSchema, getGroupDetailsSchema,
-  removeQueuesFromGroupSchema, editGroupSchema, getUserDetailsSchema, removeGroupsFromUserSchema
+  removeQueuesFromGroupSchema, editGroupSchema, getUserDetailsSchema, removeGroupsFromUserSchema,
+  assignQueuesToUserSchema, removeQueuesFromUserSchema
 } from "./rbac.validation.js";
 
 const router = express.Router();
@@ -180,5 +181,25 @@ router.post("/remove-groups-from-user",
     // authenticateJwt,
     validate(removeGroupsFromUserSchema),
     removeGroupsFromUser);
+
+/**
+ * POST /api/v1/rbac/assign-queues-to-user
+ * Body: { userId: number, queueIds: number[] }
+ * Global Admin assigns specific queues (from Superuser's pool) to a regular USER.
+ */
+router.post("/assign-queues-to-user",
+    // authenticateJwt,
+    validate(assignQueuesToUserSchema),
+    assignQueuesToUser);
+
+/**
+ * POST /api/v1/rbac/remove-queues-from-user
+ * Body: { userId: number, queueIds: number[] }
+ * Global Admin removes direct queue assignments from a USER.
+ */
+router.post("/remove-queues-from-user",
+    // authenticateJwt,
+    validate(removeQueuesFromUserSchema),
+    removeQueuesFromUser);
 
 export default router;

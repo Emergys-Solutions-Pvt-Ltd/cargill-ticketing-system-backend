@@ -204,6 +204,26 @@ export const MESSAGES = {
     statusCode: 200,
     messageText: "Groups removed from user successfully.",
   },
+  queuesAssignedToUser: {
+    statusFlag: true,
+    statusCode: 200,
+    messageText: "Queues assigned to user successfully.",
+  },
+  queuesRemovedFromUser: {
+    statusFlag: true,
+    statusCode: 200,
+    messageText: "Queues removed from user successfully.",
+  },
+  invalidQueuesForUser: {
+    statusFlag: false,
+    statusCode: 422,
+    messageText: "One or more queues are invalid or not accessible via the user's Superuser.",
+  },
+  notSuperuser: {
+    statusFlag: false,
+    statusCode: 422,
+    messageText: "Groups can only be assigned to Superusers.",
+  },
   ticketDetailsFetched: {
     statusFlag: true,
     statusCode: 200,
