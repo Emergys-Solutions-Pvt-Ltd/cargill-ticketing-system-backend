@@ -1,4 +1,4 @@
-import { getDepartmentStatsModel, addUserModel, toggleUserStatusModel, getQueuesModel, getUsersOverviewModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel, assignGroupsToUserModel, removeGroupsFromUserModel, editUserModel, getGroupDetailsModel, removeQueuesFromGroupModel, editGroupModel, getUserDetailsModel, assignQueuesToUserModel, removeQueuesFromUserModel } from "./rbac.model.js";
+import { getDepartmentStatsModel, addUserModel, toggleUserStatusModel, getQueuesModel, getUsersOverviewModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel, assignGroupsToUserModel, removeGroupsFromUserModel, editUserModel, getGroupDetailsModel, removeQueuesFromGroupModel, editGroupModel, getUserDetailsModel, assignQueuesToUserModel, removeQueuesFromUserModel, getUserGroupsModel } from "./rbac.model.js";
 import { getConfig } from "../../config/env.config.js";
 
 /**
@@ -334,4 +334,13 @@ export const assignQueuesToUserService = async ({ userId, queueIds, assignedBy }
 export const removeQueuesFromUserService = async ({ userId, queueIds }) => {
   const uniqueQueueIds = [...new Set(queueIds)];
   return removeQueuesFromUserModel({ userId, queueIds: uniqueQueueIds });
+};
+
+/**
+ * Fetch all groups assigned to a specific user (superuser).
+ * @param {{ userId: number }} options
+ * @returns {Promise<object[]>}
+ */
+export const getUserGroupsService = async ({ userId }) => {
+  return getUserGroupsModel({ userId });
 };

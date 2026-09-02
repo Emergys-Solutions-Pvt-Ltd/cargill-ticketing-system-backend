@@ -1,5 +1,5 @@
 import express from "express";
-import { getDepartments, addUser, toggleUserStatus, getQueues, getUsers, getGroups, addGroup, addQueuesToGroup, assignGroupsToUser, removeGroupsFromUser, editUser, getGroupDetails, removeQueuesFromGroup, editGroup, getUserDetails, assignQueuesToUser, removeQueuesFromUser } from "./rbac.controller.js";
+import { getDepartments, addUser, toggleUserStatus, getQueues, getUsers, getGroups, addGroup, addQueuesToGroup, assignGroupsToUser, removeGroupsFromUser, editUser, getGroupDetails, removeQueuesFromGroup, editGroup, getUserDetails, assignQueuesToUser, removeQueuesFromUser, getUserGroups } from "./rbac.controller.js";
 import { authenticateJwt } from "../../middlewares/auth.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import {
@@ -7,7 +7,7 @@ import {
   getQueuesSchema, getUsersSchema, getGroupsSchema, addGroupSchema,
   addQueuesToGroupSchema, assignGroupsToUserSchema, editUserSchema, getGroupDetailsSchema,
   removeQueuesFromGroupSchema, editGroupSchema, getUserDetailsSchema, removeGroupsFromUserSchema,
-  assignQueuesToUserSchema, removeQueuesFromUserSchema
+  assignQueuesToUserSchema, removeQueuesFromUserSchema, getUserGroupsSchema
 } from "./rbac.validation.js";
 
 const router = express.Router();
@@ -201,5 +201,15 @@ router.post("/remove-queues-from-user",
     // authenticateJwt,
     validate(removeQueuesFromUserSchema),
     removeQueuesFromUser);
+
+/**
+ * POST /api/v1/rbac/get-user-groups
+ * Body: { userId: number }
+ * Fetch all groups assigned to a specific user (superuser).
+ */
+router.post("/get-user-groups",
+    // authenticateJwt,
+    validate(getUserGroupsSchema),
+    getUserGroups);
 
 export default router;

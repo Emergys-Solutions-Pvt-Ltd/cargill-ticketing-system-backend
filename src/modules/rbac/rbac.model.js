@@ -1502,3 +1502,26 @@ export const removeQueuesFromUserModel = async ({ userId, queueIds }) => {
 
   return { deleted: result.rowCount };
 };
+
+/**
+ * Fetch all groups assigned to a specific user (superuser).
+ * @param {{ userId: number }} options
+ * @returns {Promise<object[]>}
+ */
+export const getUserGroupsModel = async ({ userId }) => {
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+
+  const query = `
+    SELECT
+      g.group_id AS "groupId",
+      g.group_name AS "groupName"
+    FROM ${rbacSchema}.user_group ug
+    JOIN ${rbacSchema}.groups g ON g.group_id = ug.group_id
+    WHERE ug.user_id = $1 AND g.is_active = TRUE
+    ORDER BY g.group_name ASC
+  `;
+
+  const result = await pool.query(query, [userId]);
+  return result.rows;
+};

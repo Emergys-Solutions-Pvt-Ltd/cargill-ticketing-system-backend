@@ -1,4 +1,4 @@
-import { getDepartmentStatsService, addUserService, toggleUserStatusService, getQueuesService, getUsersOverviewService, getGroupsService, addGroupService, assignQueuesToGroupService, assignGroupsToUserService, removeGroupsFromUserService, editUserService, getGroupDetailsService, removeQueuesFromGroupService, editGroupService, getUserDetailsService, assignQueuesToUserService, removeQueuesFromUserService } from "./rbac.service.js";
+import { getDepartmentStatsService, addUserService, toggleUserStatusService, getQueuesService, getUsersOverviewService, getGroupsService, addGroupService, assignQueuesToGroupService, assignGroupsToUserService, removeGroupsFromUserService, editUserService, getGroupDetailsService, removeQueuesFromGroupService, editGroupService, getUserDetailsService, assignQueuesToUserService, removeQueuesFromUserService, getUserGroupsService } from "./rbac.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
 import asyncWrapper from "../../utils/asyncWrapper.js";
 
@@ -347,4 +347,15 @@ export const removeQueuesFromUser = asyncWrapper(async (req, res) => {
   }
 
   return res.sendResponse(MESSAGES.queuesRemovedFromUser, { deleted: result.deleted });
+});
+
+/**
+ * POST /api/v1/rbac/get-user-groups
+ * Body: { userId: number }
+ * Fetch all groups assigned to a specific user (superuser).
+ */
+export const getUserGroups = asyncWrapper(async (req, res) => {
+  const { userId } = req.body ?? {};
+  const result = await getUserGroupsService({ userId });
+  return res.sendResponse(MESSAGES.groupsFetched, result);
 });

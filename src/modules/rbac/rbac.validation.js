@@ -110,3 +110,7 @@ export const removeQueuesFromUserSchema = Joi.object({
   userId: Joi.number().integer().positive().required(),
   queueIds: Joi.array().items(Joi.number().integer().positive()).min(1).required(),
 });
+
+export const getUserGroupsSchema = Joi.object({
+  userId: Joi.number().integer().positive().required(),
+});
