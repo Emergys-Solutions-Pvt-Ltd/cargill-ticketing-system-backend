@@ -6,6 +6,8 @@ import {
   fetchTaskFormDetails,
   fetchTaskDetails,
   fetchSubmittedForm,
+  logAttachmentView,
+  logAttachmentDownload,
 } from "./ticket.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
 import asyncWrapper from "../../utils/asyncWrapper.js";
@@ -81,3 +83,27 @@ export const getSubmittedForm = asyncWrapper(async (req, res) => {
   const result = await fetchSubmittedForm({ ticketId });
   return res.sendResponse(MESSAGES.ticketDetailsFetched, result);
 });
+
+/**
+ * POST /api/v1/tickets/log-view
+ * Body: { attachmentId }
+ * Logs who previewed an attachment and when (user from JWT).
+ */
+export const logView = asyncWrapper(async (req, res) => {
+  const { attachmentId } = req.body;
+  const userId = req.user?.sub ?? req.user?.username ?? req.user?.email;
+  const log = await logAttachmentView({ attachmentId, userId });
+  return res.sendResponse(MESSAGES.attachmentViewLogged, log);
+});
+
+/**
+ * POST /api/v1/tickets/log-download
+ * Body: { attachmentId }
+ * Increments download_count on the attachment row.
+ */
+export const logDownload = asyncWrapper(async (req, res) => {
+  const { attachmentId } = req.body;
+  const result = await logAttachmentDownload({ attachmentId });
+  return res.sendResponse(MESSAGES.attachmentDownloadLogged, result);
+});
+

@@ -29,6 +29,8 @@ import {
   queryTaskIncidentHistory,
   queryTaskLinkedTasks,
   queryTaskLinkedIncidents,
+  insertAttachmentViewLog,
+  incrementAttachmentDownloadCount,
 } from "./ticket.details.model.js";
 
 // ---------------------------------------------------------------------------
@@ -249,3 +251,29 @@ export const fetchSubmittedForm = async ({ ticketId }) => {
     return { type: "field", label: row.input, value: row.response };
   });
 };
+
+// ---------------------------------------------------------------------------
+// Attachment audit services
+// ---------------------------------------------------------------------------
+
+/**
+ * Log a preview (view) event for an attachment.
+ * @param {string} attachmentId
+ * @param {string} userId  — extracted from JWT
+ * @returns {Promise<object>}
+ */
+export const logAttachmentView = async ({ attachmentId, userId }) => {
+  const result = await insertAttachmentViewLog(attachmentId, userId);
+  return result.rows[0];
+};
+
+/**
+ * Increment download_count on the attachment row by 1.
+ * @param {string} attachmentId
+ * @returns {Promise<object>}
+ */
+export const logAttachmentDownload = async ({ attachmentId }) => {
+  const result = await incrementAttachmentDownloadCount(attachmentId);
+  return result.rows[0];
+};
+

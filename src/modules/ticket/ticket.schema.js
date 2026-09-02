@@ -45,3 +45,7 @@ export const getFilterOptionsSchema = Joi.object({
 export const getTicketDetailsSchema = Joi.object({
   ticketId: Joi.string().trim().required(),
 });
+
+export const attachmentIdSchema = Joi.object({
+  attachmentId: Joi.string().trim().required(),
+});

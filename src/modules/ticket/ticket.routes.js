@@ -7,12 +7,15 @@ import {
   getTaskFormDetails,
   getTaskDetails,
   getSubmittedForm,
+  logView,
+  logDownload,
 } from "./ticket.controller.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import {
   getTicketsSchema,
   getFilterOptionsSchema,
   getTicketDetailsSchema,
+  attachmentIdSchema,
 } from "./ticket.schema.js";
 import { authenticateJwt } from "../../middlewares/auth.middleware.js";
 
@@ -48,5 +51,11 @@ router.post("/get-task-details",   authenticateJwt, validate(getTicketDetailsSch
 
 /** POST /api/v1/tickets/get-submitted-form */
 router.post("/get-submitted-form", authenticateJwt, validate(getTicketDetailsSchema), getSubmittedForm);
+
+/** POST /api/v1/tickets/log-view — log who previewed an attachment */
+router.post("/log-view",      authenticateJwt, validate(attachmentIdSchema, "body"), logView);
+
+/** POST /api/v1/tickets/log-download — increment attachment download_count */
+router.post("/log-download",  authenticateJwt, validate(attachmentIdSchema, "body"), logDownload);
 
 export default router;
