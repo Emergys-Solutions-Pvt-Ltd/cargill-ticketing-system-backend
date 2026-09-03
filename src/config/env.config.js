@@ -1,7 +1,7 @@
 const validateEnv = () => {
   const requiredFields = [
     "DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME",
-    "COGNITO_USER_POOL_ID", "COGNITO_CLIENT_ID",
+    "AZURE_AD_CLIENT_ID", "AZURE_AD_TENANT_ID",
     "RBAC_SCHEMA", "APP_TYPE",
   ];
   const missing = requiredFields.filter((field) => !process.env[field]);
@@ -20,9 +20,10 @@ const validateEnv = () => {
       password: process.env.DB_PASSWORD,
       database: process.env.DB_NAME,
     },
-    cognito: {
-      userPoolId: process.env.COGNITO_USER_POOL_ID,
-      clientId: process.env.COGNITO_CLIENT_ID,
+    azureAd: {
+      clientId: process.env.AZURE_AD_CLIENT_ID,
+      tenantId: process.env.AZURE_AD_TENANT_ID,
+      clientSecret: process.env.AZURE_AD_CLIENT_SECRET, // optional for API
     },
     rbacSchema: process.env.RBAC_SCHEMA,  // "rbac" — matches env typo intentionally
     appType: process.env.APP_TYPE,         // "HR" | "GENERIC"
@@ -30,7 +31,7 @@ const validateEnv = () => {
 
   // deep freez obj to ensure immutability
   Object.freeze(config.db);
-  Object.freeze(config.cognito);
+  Object.freeze(config.azureAd);
   return Object.freeze(config);
 };
 

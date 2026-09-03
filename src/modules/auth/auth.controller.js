@@ -6,7 +6,7 @@ import asyncWrapper from "../../utils/asyncWrapper.js";
  * POST /api/v1/auth/verify-access
  *
  * Called once by the frontend after SSO login.
- * Reads email from Cognito JWT (set by authenticateJwt middleware).
+ * Reads email from MSAL/Azure AD JWT (set by authenticateJwt middleware).
  * Looks up user in rbac.app_user — returns profile or 403 if not found/inactive.
  *
  * No body params required. Email comes from JWT payload (req.user.email).
