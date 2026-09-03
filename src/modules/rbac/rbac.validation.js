@@ -15,12 +15,11 @@ export const addUserSchema = Joi.object({
   email: Joi.string().email().required(),
   phoneNo: Joi.string().trim().optional().allow(""),
   departmentId: Joi.number().integer().positive().required(),
-  reportsToUserId: Joi.number().integer().positive().optional(),
   // Accepted for all roles in body.
-  // SUPERUSER → inserted into user_group.
-  // USER      → accepted but not used (reserved for future).
+  // SUPERUSER → inserted into user_group (multiple).
+  // USER      → inserted into user_group (max 1).
   assignedGroupIds: Joi.array().items(Joi.number().integer().positive()).optional(),
-  // USER only — assigned queues from Superuser's group pool.
+  // USER only — assigned queues from their group pool.
   assignedQueueIds: Joi.array().items(Joi.number().integer().positive()).optional(),
 });
 
@@ -69,7 +68,6 @@ export const editUserSchema = Joi.object({
   userName: Joi.string().trim().optional(),
   roleCode: Joi.string().valid("GLOBAL_ADMIN", "SUPERUSER", "USER").optional(),
   phoneNo: Joi.string().trim().optional().allow(""),
-  reportsToUserId: Joi.number().integer().positive().optional(),
   workLocation: Joi.string().trim().optional().allow(""),
 }).min(2).messages({ // min 2 because userId is 1, needs at least one field to edit
   "object.min": "At least one field to update must be provided",

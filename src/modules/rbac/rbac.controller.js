@@ -40,8 +40,7 @@ export const addUser = asyncWrapper(async (req, res) => {
     email,
     phoneNo,
     departmentId,
-    reportsToUserId,
-    assignedGroupIds = [],  // all roles: accepted in body; SUPERUSER → DB insert, USER → ignored
+    assignedGroupIds = [],  // all roles: accepted in body; SUPERUSER -> multiple, USER -> max 1
     assignedQueueIds = [],  // USER only → inserted into user_queue
   } = req.body ?? {};
 
@@ -49,7 +48,7 @@ export const addUser = asyncWrapper(async (req, res) => {
 
   const result = await addUserService({
     roleCode, userName, email, phoneNo, departmentId,
-    reportsToUserId, assignedGroupIds, assignedQueueIds, createdBy,
+    assignedGroupIds, assignedQueueIds, createdBy,
   });
 
   if (result?.error === "EMAIL_EXISTS") return res.sendResponse(MESSAGES.userAlreadyExists);
@@ -190,7 +189,6 @@ export const assignGroupsToUser = asyncWrapper(async (req, res) => {
  *   userName       : string
  *   roleCode       : string  — "USER" | "SUPERUSER"
  *   phoneNo        : string
- *   reportsToUserId: number  — who this user reports to
  *   workLocation   : string
  * Only fields present in the body are updated.
  * Role change: ONLY role_id changes — hierarchy and groups untouched.
@@ -201,7 +199,6 @@ export const editUser = asyncWrapper(async (req, res) => {
     userName,
     roleCode,
     phoneNo,
-    reportsToUserId,
     workLocation,
   } = req.body ?? {};
 
@@ -212,7 +209,6 @@ export const editUser = asyncWrapper(async (req, res) => {
     userName,
     roleCode,
     phoneNo,
-    reportsToUserId,
     workLocation,
     updatedBy,
   });

@@ -92,11 +92,11 @@ export const getDepartmentStatsService = async (departmentId = null) => {
  * Inserts a new user. Validates email uniqueness.
  * Assigns groups if provided.
  *
- * @param {{ roleCode, userName, email, phoneNo?, departmentId, reportsToUserId?, assignedGroupIds?, createdBy? }} data
+ * @param {{ roleCode, userName, email, phoneNo?, departmentId, assignedGroupIds?, createdBy? }} data
  * @returns {Promise<{ userId: number } | { error: string }>}
  */
-export const addUserService = async ({ roleCode, userName, email, phoneNo, departmentId, reportsToUserId, assignedGroupIds = [], assignedQueueIds = [], createdBy }) => {
-  return addUserModel({ roleCode, userName, email, phoneNo, departmentId, reportsToUserId, assignedGroupIds, assignedQueueIds, createdBy });
+export const addUserService = async ({ roleCode, userName, email, phoneNo, departmentId, assignedGroupIds = [], assignedQueueIds = [], createdBy }) => {
+  return addUserModel({ roleCode, userName, email, phoneNo, departmentId, assignedGroupIds, assignedQueueIds, createdBy });
 };
 
 /**
@@ -143,8 +143,6 @@ export const getUsersOverviewService = async ({ departmentId } = {}) => {
     roleName: u.roleName,
     departmentId: u.departmentId,
     departmentName: u.departmentName,
-    reportsToUserId: u.reportsToUserId ?? null,
-    reportsToUserName: u.reportsToUserName ?? null,
     groupsAssigned: Number(u.groupsAssigned),
     queuesAssigned: Number(u.queuesAssigned),
     isActive: u.isActive,
@@ -234,11 +232,11 @@ export const assignGroupsToUserService = async ({ userId, groupIds, assignedBy }
  * Only fields present in payload are updated — undefined = skip.
  * Role change: only role_id updates. Hierarchy (reports_to) and groups unchanged.
  *
- * @param {{ userId: number, userName?, roleCode?, phoneNo?, reportsToUserId?, workLocation?, updatedBy: number }} data
+ * @param {{ userId: number, userName?, roleCode?, phoneNo?, workLocation?, updatedBy: number }} data
  * @returns {Promise<{ userId: number } | { error: string }>}
  */
-export const editUserService = async ({ userId, userName, roleCode, phoneNo, reportsToUserId, workLocation, updatedBy }) => {
-  return editUserModel({ userId, userName, roleCode, phoneNo, reportsToUserId, workLocation, updatedBy });
+export const editUserService = async ({ userId, userName, roleCode, phoneNo, workLocation, updatedBy }) => {
+  return editUserModel({ userId, userName, roleCode, phoneNo, workLocation, updatedBy });
 };
 
 /**

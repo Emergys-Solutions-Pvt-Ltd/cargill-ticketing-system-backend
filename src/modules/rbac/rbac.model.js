@@ -177,7 +177,7 @@ export const getDepartmentStatsModel = async (departmentId = null) => {
 //   return result.rows;
 // };
 
-export const addUserModel = async ({ roleCode, userName, email, phoneNo, departmentId, reportsToUserId, assignedGroupIds = [], assignedQueueIds = [], createdBy }) => {
+export const addUserModel = async ({ roleCode, userName, email, phoneNo, departmentId, assignedGroupIds = [], assignedQueueIds = [], createdBy }) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
   const client = await pool.connect();
@@ -206,46 +206,45 @@ export const addUserModel = async ({ roleCode, userName, email, phoneNo, departm
     }
     const roleId = roleResult.rows[0].role_id;
 
-    // 3. Insert user — RETURNING user_id for group/queue assignment
     const insertResult = await client.query(
       `INSERT INTO ${rbacSchema}.app_user
-         (user_name, email, phone_no, role_id, department_id, reports_to_user_id, is_active, created_by, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7, CURRENT_TIMESTAMP)
+         (user_name, email, phone_no, role_id, department_id, is_active, created_by, created_at)
+       VALUES ($1, $2, $3, $4, $5, TRUE, $6, CURRENT_TIMESTAMP)
        RETURNING user_id`,
-      [userName, email, phoneNo ?? null, roleId, departmentId, reportsToUserId ?? null, createdBy]
+      [userName, email, phoneNo ?? null, roleId, departmentId, createdBy]
     );
     const userId = insertResult.rows[0].user_id;
 
-    if (roleCode === 'SUPERUSER') {
-      // 4a. SUPERUSER: assign groups if provided
-      if (assignedGroupIds.length > 0) {
-        const groupsJson = JSON.stringify(
-          assignedGroupIds.map((id) => ({ group_id: id }))
-        );
-        await client.query(
-          `INSERT INTO ${rbacSchema}.user_group (user_id, group_id, assigned_by, assigned_at)
-           SELECT $1, g.group_id, $2, CURRENT_TIMESTAMP
-           FROM jsonb_to_recordset($3::jsonb) AS g(group_id BIGINT)
-           ON CONFLICT (user_id, group_id) DO NOTHING`,
-          [userId, createdBy, groupsJson]
-        );
-      }
-    } else if (roleCode === 'USER') {
-      // 4b. USER: assign queues if provided — must belong to Superuser's group pool
-      if (assignedQueueIds.length > 0) {
-        if (!reportsToUserId) {
-          await client.query("ROLLBACK");
-          return { error: "SUPERUSER_REQUIRED_FOR_QUEUE_ASSIGN" };
-        }
+    if (roleCode === 'USER' && assignedGroupIds.length > 1) {
+      await client.query("ROLLBACK");
+      return { error: "TOO_MANY_GROUPS_FOR_USER" };
+    }
 
-        // Validate queues are accessible via the Superuser's groups
+    // 4. Assign groups for SUPERUSER (multiple) or USER (max 1)
+    if (assignedGroupIds.length > 0) {
+      const groupsJson = JSON.stringify(
+        assignedGroupIds.map((id) => ({ group_id: id }))
+      );
+      await client.query(
+        `INSERT INTO ${rbacSchema}.user_group (user_id, group_id, assigned_by, assigned_at)
+         SELECT $1, g.group_id, $2, CURRENT_TIMESTAMP
+         FROM jsonb_to_recordset($3::jsonb) AS g(group_id BIGINT)
+         ON CONFLICT (user_id, group_id) DO NOTHING`,
+        [userId, createdBy, groupsJson]
+      );
+    }
+
+    if (roleCode === 'USER') {
+      // 5. USER: assign queues if provided — must belong to their assigned group
+      if (assignedQueueIds.length > 0) {
+        // Validate queues are accessible via the USER's group
         const validQueues = await client.query(
           `SELECT DISTINCT gq.queue_id
            FROM ${rbacSchema}.user_group ug
            JOIN ${rbacSchema}.group_queue gq ON gq.group_id = ug.group_id
            WHERE ug.user_id = $1
              AND gq.queue_id = ANY($2::bigint[])`,
-          [reportsToUserId, assignedQueueIds]
+          [userId, assignedQueueIds]
         );
         if (validQueues.rows.length !== assignedQueueIds.length) {
           await client.query("ROLLBACK");
@@ -530,22 +529,15 @@ export const getUsersOverviewModel = async ({ departmentId }) => {
         d.department_name    AS "departmentName",
         u.is_active          AS "isActive",
         u.last_login_at      AS "lastLogin",
-        u.reports_to_user_id AS "reportsToUserId",
 
         -- groupsAssigned:
-        --   SUPERUSER → direct groups on this superuser only
-        --   USER      → groups assigned to their superuser (reports_to_user_id)
+        --   SUPERUSER & USER → direct groups on this user
         --   GLOBAL_ADMIN → 0
         CASE
-          WHEN r.role_code = 'SUPERUSER' THEN (
+          WHEN r.role_code IN ('SUPERUSER', 'USER') THEN (
             SELECT COUNT(DISTINCT ug.group_id)
             FROM ${rbacSchema}.user_group ug
             WHERE ug.user_id = u.user_id
-          )
-          WHEN r.role_code = 'USER' THEN (
-            SELECT COUNT(DISTINCT ug.group_id)
-            FROM ${rbacSchema}.user_group ug
-            WHERE ug.user_id = u.reports_to_user_id
           )
           ELSE 0
         END AS "groupsAssigned",
@@ -582,14 +574,6 @@ export const getUsersOverviewModel = async ({ departmentId }) => {
 
     SELECT
       b.*,
-
-      -- Name of the user this person reports to
-      (
-        SELECT sup.user_name
-        FROM ${rbacSchema}.app_user sup
-        WHERE sup.user_id = b."reportsToUserId"
-        LIMIT 1
-      ) AS "reportsToUserName",
 
       -- Total records before pagination
       COUNT(*) OVER() AS "totalCount"
@@ -893,10 +877,43 @@ export const assignGroupsToUserModel = async ({ userId, groupIds, assignedBy }) 
       await client.query("ROLLBACK");
       return { error: "USER_NOT_FOUND" };
     }
-    // Groups can only be assigned to SUPERUSERs
-    if (user.role_code !== 'SUPERUSER') {
-      await client.query("ROLLBACK");
-      return { error: "NOT_SUPERUSER" };
+    // 1b. Validate role limits
+    if (user.role_code === 'USER') {
+      const currentCountRes = await client.query(`SELECT COUNT(*) FROM ${rbacSchema}.user_group WHERE user_id = $1`, [userId]);
+      const currentCount = parseInt(currentCountRes.rows[0].count);
+      
+      // We will do a DELETE of their existing group first if they're a USER to enforce the max 1 rule smoothly
+      // Since they can only have 1, we just replace it. 
+      // But if they sent multiple groups in this request, we throw an error.
+      if (groupIds.length > 1) {
+        await client.query("ROLLBACK");
+        return { error: "TOO_MANY_GROUPS_FOR_USER" };
+      }
+
+      // Drop existing group (and queues cascade) so we can insert the new one
+      if (currentCount > 0) {
+        // Find existing groups
+        const existingRes = await client.query(`SELECT group_id FROM ${rbacSchema}.user_group WHERE user_id = $1`, [userId]);
+        const existingGroupIds = existingRes.rows.map(r => r.group_id);
+        
+        // Find associated queues
+        const queueRes = await client.query(
+          `SELECT DISTINCT gq.queue_id FROM ${rbacSchema}.group_queue gq WHERE gq.group_id = ANY($1::bigint[])`,
+          [existingGroupIds]
+        );
+        const queueIds = queueRes.rows.map(r => r.queue_id);
+
+        // Delete group
+        await client.query(`DELETE FROM ${rbacSchema}.user_group WHERE user_id = $1`, [userId]);
+        
+        // Cascade delete queues
+        if (queueIds.length > 0) {
+          await client.query(
+            `DELETE FROM ${rbacSchema}.user_queue WHERE user_id = $1 AND queue_id = ANY($2::bigint[])`,
+            [userId, queueIds]
+          );
+        }
+      }
     }
 
     // 2. Validate groups belong to same department and are active
@@ -974,13 +991,11 @@ export const removeGroupsFromUserModel = async ({ userId, groupIds }) => {
       [userId, groupIds]
     );
 
-    // 4. Cascade: remove those queues from user_queue for all users reporting to this Superuser
+    // 4. Cascade: remove those queues from user_queue for THIS user
     if (queueIds.length > 0) {
       await client.query(
         `DELETE FROM ${rbacSchema}.user_queue qu
-         USING ${rbacSchema}.app_user u
-         WHERE qu.user_id = u.user_id
-           AND u.reports_to_user_id = $1
+         WHERE qu.user_id = $1
            AND qu.queue_id = ANY($2::bigint[])`,
         [userId, queueIds]
       );
@@ -1010,10 +1025,10 @@ export const removeGroupsFromUserModel = async ({ userId, groupIds }) => {
  *   - People reporting TO this user are NOT reassigned (per spec).
  *   - Groups are NOT touched.
  *
- * @param {{ userId: number, userName?, roleCode?, phoneNo?, reportsToUserId?, workLocation?, updatedBy: number }} params
+ * @param {{ userId: number, userName?, roleCode?, phoneNo?, workLocation?, updatedBy: number }} params
  * @returns {Promise<{ userId: number } | { error: string }>}
  */
-export const editUserModel = async ({ userId, userName, roleCode, phoneNo, reportsToUserId, workLocation, updatedBy }) => {
+export const editUserModel = async ({ userId, userName, roleCode, phoneNo, workLocation, updatedBy }) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
   const client = await pool.connect();
@@ -1061,10 +1076,6 @@ export const editUserModel = async ({ userId, userName, roleCode, phoneNo, repor
     if (phoneNo !== undefined) {
       setClauses.push(`phone_no = $${idx++}`);
       params.push(phoneNo);
-    }
-    if (reportsToUserId !== undefined) {
-      setClauses.push(`reports_to_user_id = $${idx++}`);
-      params.push(reportsToUserId);
     }
     if (workLocation !== undefined) {
       setClauses.push(`work_location = $${idx++}`);
@@ -1322,80 +1333,26 @@ export const getUserDetailsModel = async (userId) => {
 
   const userInfo = userRes.rows[0];
 
-  // 2. Direct Reports (same for all roles)
-  const reportsQuery = `
+  // 2. Direct Groups (same for all roles now)
+  const groupsQuery = `
     SELECT
-      u.user_id AS "userId",
-      u.user_name AS "userName",
-      u.email,
-      r.role_name AS "roleName"
-    FROM ${rbacSchema}.app_user u
-    JOIN ${rbacSchema}.role r ON r.role_id = u.role_id
-    WHERE u.reports_to_user_id = $1
-      AND u.is_active = TRUE
-    ORDER BY u.user_name
+      g.group_id AS "groupId",
+      g.group_name AS "groupName",
+      COUNT(DISTINCT gq.queue_id) AS "queuesCount"
+    FROM ${rbacSchema}.user_group ug
+    JOIN ${rbacSchema}.groups g ON g.group_id = ug.group_id
+    LEFT JOIN ${rbacSchema}.group_queue gq ON gq.group_id = g.group_id
+    WHERE ug.user_id = $1
+      AND g.is_active = TRUE
+    GROUP BY g.group_id, g.group_name
+    ORDER BY g.group_name
   `;
-  const reportsRes = await pool.query(reportsQuery, [userId]);
-
-  let inheritedGroups = [];
-
-  if (userInfo.roleCode === 'USER') {
-    // USER: return their Superuser's groups, but only count queues directly assigned to this user
-    const groupsQuery = `
-      SELECT
-        g.group_id AS "groupId",
-        g.group_name AS "groupName",
-        COUNT(DISTINCT qu.queue_id) AS "queuesCount"
-      FROM ${rbacSchema}.app_user u
-      JOIN ${rbacSchema}.user_group ug ON ug.user_id = u.reports_to_user_id
-      JOIN ${rbacSchema}.groups g ON g.group_id = ug.group_id
-      LEFT JOIN ${rbacSchema}.group_queue gq ON gq.group_id = g.group_id
-      LEFT JOIN ${rbacSchema}.user_queue qu 
-        ON qu.queue_id = gq.queue_id 
-       AND qu.user_id = u.user_id
-      WHERE u.user_id = $1
-        AND g.is_active = TRUE
-      GROUP BY g.group_id, g.group_name
-      ORDER BY g.group_name
-    `;
-    const groupsRes = await pool.query(groupsQuery, [userId]);
-    inheritedGroups = groupsRes.rows.map(g => ({ ...g, queuesCount: Number(g.queuesCount) }));
-
-  } else {
-    // SUPERUSER / GLOBAL_ADMIN: return direct and inherited groups
-    const groupsQuery = `
-      WITH user_groups AS (
-        -- Direct groups
-        SELECT group_id FROM ${rbacSchema}.user_group WHERE user_id = $1
-        UNION
-        -- Inherited groups (only if user is SUPERUSER)
-        SELECT ug.group_id
-        FROM ${rbacSchema}.user_group ug
-        JOIN ${rbacSchema}.app_user sub ON sub.user_id = ug.user_id
-        JOIN ${rbacSchema}.app_user u ON u.user_id = $1
-        JOIN ${rbacSchema}.role r ON r.role_id = u.role_id
-        WHERE sub.reports_to_user_id = $1
-          AND r.role_code = 'SUPERUSER'
-      )
-      SELECT
-        g.group_id AS "groupId",
-        g.group_name AS "groupName",
-        COUNT(DISTINCT gq.queue_id) AS "queuesCount"
-      FROM user_groups ug
-      JOIN ${rbacSchema}.groups g ON g.group_id = ug.group_id
-      LEFT JOIN ${rbacSchema}.group_queue gq ON gq.group_id = g.group_id
-      WHERE g.is_active = TRUE
-      GROUP BY g.group_id, g.group_name
-      ORDER BY g.group_name
-    `;
-    const groupsRes = await pool.query(groupsQuery, [userId]);
-    inheritedGroups = groupsRes.rows.map(g => ({ ...g, queuesCount: Number(g.queuesCount) }));
-  }
+  const groupsRes = await pool.query(groupsQuery, [userId]);
+  const inheritedGroups = groupsRes.rows.map(g => ({ ...g, queuesCount: Number(g.queuesCount) }));
 
   return {
     userInfo,
     inheritedGroups,
-    directReports: reportsRes.rows,
   };
 };
 
@@ -1419,9 +1376,9 @@ export const assignQueuesToUserModel = async ({ userId, queueIds, assignedBy }) 
   try {
     await client.query("BEGIN");
 
-    // 1. Fetch user — must be active USER with a Superuser
+    // 1. Fetch user — must be active USER
     const userResult = await client.query(
-      `SELECT u.user_id, u.reports_to_user_id, r.role_code
+      `SELECT u.user_id, r.role_code
        FROM ${rbacSchema}.app_user u
        JOIN ${rbacSchema}.role r ON r.role_id = u.role_id
        WHERE u.user_id = $1 AND u.is_active = TRUE
@@ -1437,19 +1394,15 @@ export const assignQueuesToUserModel = async ({ userId, queueIds, assignedBy }) 
       await client.query("ROLLBACK");
       return { error: "NOT_REGULAR_USER" };
     }
-    if (!user.reports_to_user_id) {
-      await client.query("ROLLBACK");
-      return { error: "SUPERUSER_REQUIRED_FOR_QUEUE_ASSIGN" };
-    }
 
-    // 2. Validate all queueIds belong to the Superuser's group pool
+    // 2. Validate all queueIds belong to the USER's own group pool
     const validQueues = await client.query(
       `SELECT DISTINCT gq.queue_id
        FROM ${rbacSchema}.user_group ug
        JOIN ${rbacSchema}.group_queue gq ON gq.group_id = ug.group_id
        WHERE ug.user_id = $1
          AND gq.queue_id = ANY($2::bigint[])`,
-      [user.reports_to_user_id, queueIds]
+      [userId, queueIds]
     );
     if (validQueues.rows.length !== queueIds.length) {
       await client.query("ROLLBACK");
