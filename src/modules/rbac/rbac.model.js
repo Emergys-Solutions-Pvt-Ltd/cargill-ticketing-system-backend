@@ -1334,19 +1334,40 @@ export const getUserDetailsModel = async (userId) => {
   const userInfo = userRes.rows[0];
 
   // 2. Direct Groups (same for all roles now)
-  const groupsQuery = `
-    SELECT
-      g.group_id AS "groupId",
-      g.group_name AS "groupName",
-      COUNT(DISTINCT gq.queue_id) AS "queuesCount"
-    FROM ${rbacSchema}.user_group ug
-    JOIN ${rbacSchema}.groups g ON g.group_id = ug.group_id
-    LEFT JOIN ${rbacSchema}.group_queue gq ON gq.group_id = g.group_id
-    WHERE ug.user_id = $1
-      AND g.is_active = TRUE
-    GROUP BY g.group_id, g.group_name
-    ORDER BY g.group_name
-  `;
+  let groupsQuery;
+
+  if (userInfo.roleCode === 'USER') {
+    groupsQuery = `
+      SELECT
+        g.group_id AS "groupId",
+        g.group_name AS "groupName",
+        COUNT(DISTINCT qu.queue_id) AS "queuesCount"
+      FROM ${rbacSchema}.user_group ug
+      JOIN ${rbacSchema}.groups g ON g.group_id = ug.group_id
+      LEFT JOIN ${rbacSchema}.group_queue gq ON gq.group_id = g.group_id
+      LEFT JOIN ${rbacSchema}.user_queue qu 
+        ON qu.queue_id = gq.queue_id 
+       AND qu.user_id = ug.user_id
+      WHERE ug.user_id = $1
+        AND g.is_active = TRUE
+      GROUP BY g.group_id, g.group_name
+      ORDER BY g.group_name
+    `;
+  } else {
+    groupsQuery = `
+      SELECT
+        g.group_id AS "groupId",
+        g.group_name AS "groupName",
+        COUNT(DISTINCT gq.queue_id) AS "queuesCount"
+      FROM ${rbacSchema}.user_group ug
+      JOIN ${rbacSchema}.groups g ON g.group_id = ug.group_id
+      LEFT JOIN ${rbacSchema}.group_queue gq ON gq.group_id = g.group_id
+      WHERE ug.user_id = $1
+        AND g.is_active = TRUE
+      GROUP BY g.group_id, g.group_name
+      ORDER BY g.group_name
+    `;
+  }
   const groupsRes = await pool.query(groupsQuery, [userId]);
   const inheritedGroups = groupsRes.rows.map(g => ({ ...g, queuesCount: Number(g.queuesCount) }));
 
