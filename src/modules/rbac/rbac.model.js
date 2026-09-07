@@ -1499,3 +1499,79 @@ export const getUserGroupsModel = async ({ userId }) => {
   const result = await pool.query(query, [userId]);
   return result.rows;
 };
+
+/**
+ * Returns an array of queue IDs a user is allowed to access.
+ * If payloadQueues is provided, it returns them directly (bypassing DB checks as requested).
+ * Otherwise, it fetches queues from the DB based on role:
+ *  - SUPERUSER: all queues in their assigned groups.
+ *  - USER: only queues directly assigned to them.
+ * Confidentiality filter: if the user's is_confidential is false, it excludes confidential queues.
+ * 
+ * @param {number} userId
+ * @param {string} roleCode
+ * @param {number[]} [payloadQueues]
+ * @returns {Promise<number[]>} Array of queue IDs
+ */
+export const getAllowedQueuesModel = async (userId, roleCode, payloadQueues = []) => {
+  if (payloadQueues && payloadQueues.length > 0) {
+    return payloadQueues;
+  }
+
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+
+  // 1. Check if user is confidential
+  const userResult = await pool.query(
+    `SELECT is_confidential FROM ${rbacSchema}.app_user WHERE user_id = $1 LIMIT 1`,
+    [userId]
+  );
+  
+  // If user doesn't exist, return empty array
+  if (!userResult.rows[0]) return [];
+  
+  const isConfidentialUser = userResult.rows[0].is_confidential === true;
+
+  // 2. Fetch Normal Queues based on Role (Only non-confidential ones)
+  let queuesQuery = '';
+  const queryParams = [userId];
+
+  if (roleCode === 'SUPERUSER') {
+    queuesQuery = `
+      SELECT DISTINCT q.queue_name
+      FROM ${rbacSchema}.user_group ug
+      JOIN ${rbacSchema}.group_queue gq ON gq.group_id = ug.group_id
+      JOIN ${rbacSchema}.queue q ON q.queue_id = gq.queue_id
+      WHERE ug.user_id = $1 AND q.is_confidential = FALSE
+    `;
+  } else if (roleCode === 'USER') {
+    queuesQuery = `
+      SELECT DISTINCT q.queue_name
+      FROM ${rbacSchema}.user_queue uq
+      JOIN ${rbacSchema}.queue q ON q.queue_id = uq.queue_id
+      WHERE uq.user_id = $1 AND q.is_confidential = FALSE
+    `;
+  } else {
+    return []; // Other roles don't have direct queue assignments this way
+  }
+
+  const result = await pool.query(queuesQuery, queryParams);
+  let allowedQueues = result.rows.map(row => row.queue_name);
+
+  // 3. Add confidential queues if user is allowed
+  if (isConfidentialUser) {
+    const confResult = await pool.query(
+      `SELECT queue_name FROM ${rbacSchema}.queue WHERE is_confidential = TRUE`
+    );
+    const confQueues = confResult.rows.map(row => row.queue_name);
+    
+    // Combine both and remove any duplicates
+    allowedQueues = [...new Set([...allowedQueues, ...confQueues])];
+  }
+
+  // If allowedQueues is empty, we return [] directly.
+  // The controller handles this to short-circuit and avoid DB fetches.
+  return allowedQueues;
+
+  return allowedQueues;
+};

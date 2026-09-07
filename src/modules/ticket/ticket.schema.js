@@ -7,6 +7,8 @@ const dateStr = () => Joi.string().isoDate().optional();
 
 // Shared filter fields — used by both get-data and get-filter-options
 export const filterFields = {
+  userId: Joi.number().integer().optional(),
+  roleCode: Joi.string().trim().optional(),
   ticketType: Joi.string()
     .valid("ALL", "SERVICE_REQUEST", "INCIDENT", "TASK")
     .default("ALL"),

@@ -11,13 +11,25 @@ import {
 } from "./ticket.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
 import asyncWrapper from "../../utils/asyncWrapper.js";
+import { getAllowedQueuesModel } from "../rbac/rbac.model.js";
 
 /**
  * POST /api/v1/tickets/get-data
  * Body: { page, pageSize, ticketType, queue[], priority[], status[], ... }
  */
 export const getTickets = asyncWrapper(async (req, res) => {
-  const { page, pageSize, ...filters } = req.body;
+  const { page, pageSize, userId, roleCode, ...filters } = req.body;
+   
+  // Inject allowed queues if not explicitly provided by UI
+  filters.queue = await getAllowedQueuesModel(userId, roleCode, filters.queue);
+  
+  if (filters.queue.length === 0) {
+    return res.sendResponse(MESSAGES.ticketsFetched || "No queues assigned", {
+      tickets: [],
+      pagination: { total: 0, page, pageSize, totalPages: 0, hasNextPage: false, hasPrevPage: false }
+    });
+  }
+  
   const result = await fetchTickets({ page, pageSize, ...filters });
   return res.sendResponse(MESSAGES.ticketsFetched, result);
 });
@@ -28,7 +40,18 @@ export const getTickets = asyncWrapper(async (req, res) => {
  * Returns dependent dropdown options scoped to current filter selection.
  */
 export const getFilterOptions = asyncWrapper(async (req, res) => {
-  const result = await fetchFilterOptions(req.body);
+  const { userId, roleCode, ...filters } = req.body;
+  
+  // Inject allowed queues if not explicitly provided by UI
+  filters.queue = await getAllowedQueuesModel(userId, roleCode, filters.queue);
+
+  if (filters.queue.length === 0) {
+    return res.sendResponse(MESSAGES.filterOptionsFetched || "No queues assigned", { 
+      queue: [], priority: [], status: [], employee: [], requestor: [], categoryLevel1: [], categoryLevel2: [], categoryLevel3: [] 
+    });
+  }
+
+  const result = await fetchFilterOptions(filters);
   return res.sendResponse(MESSAGES.filterOptionsFetched, result);
 });
 
