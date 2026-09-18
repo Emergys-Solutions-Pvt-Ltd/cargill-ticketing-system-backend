@@ -22,7 +22,7 @@ export const getDepartmentStatsModel = async (departmentId = null) => {
       d.department_id   AS "departmentId",
       d.department_code AS "departmentCode",
       d.department_name AS "departmentName",
-      d.department_desciption AS "departmentDescription",
+      d.department_description AS "departmentDescription",
 
       -- Active SUPERUSERs in this department
       COUNT(DISTINCT CASE
@@ -239,13 +239,14 @@ export const addUserModel = async ({ roleCode, userName, email, phoneNo, departm
       if (assignedQueueIds.length > 0) {
         // Validate queues are accessible via the USER's group
         const validQueues = await client.query(
-          `SELECT DISTINCT gq.queue_id
-           FROM ${rbacSchema}.user_group ug
-           JOIN ${rbacSchema}.group_queue gq ON gq.group_id = ug.group_id
-           WHERE ug.user_id = $1
-             AND gq.queue_id = ANY($2::bigint[])`,
-          [userId, assignedQueueIds]
+          `SELECT DISTINCT qd.queue_id
+           FROM ${rbacSchema}.app_user au
+           JOIN ${rbacSchema}.queue_department qd ON au.department_id = qd.department_id
+           WHERE au.user_id = $1
+             AND qd.queue_id = ANY($2::bigint[])`,
+          [userId, assignedQueueIds],
         );
+
         if (validQueues.rows.length !== assignedQueueIds.length) {
           await client.query("ROLLBACK");
           return { error: "INVALID_QUEUES_FOR_USER" };
@@ -419,21 +420,21 @@ export const getQueuesModel = async ({ groupId, departmentId, userId }) => {
         `SELECT r.role_code 
          FROM ${rbacSchema}.app_user u 
          JOIN ${rbacSchema}.role r ON r.role_id = u.role_id 
-         WHERE u.user_id = $1`, 
+         WHERE u.user_id = $1`,
         [userId]
       );
       const roleCode = userRes.rows[0]?.role_code;
-      
+
       if (roleCode === 'USER') {
         // Return only queues assigned to this USER within the group
         const result = await pool.query(
           `SELECT DISTINCT q.queue_id   AS "queueId",
                            q.queue_name AS "queueName"
-           FROM   ${rbacSchema}.group_queue gq
-           JOIN   ${rbacSchema}.groups g ON g.group_id = gq.group_id AND g.is_active = TRUE
+           FROM   ${rbacSchema}.queue_department gq
+           JOIN   ${rbacSchema}.groups g ON g.group_id = gq.department_id AND g.is_active = TRUE
            JOIN   ${rbacSchema}.queue q ON q.queue_id = gq.queue_id
            JOIN   ${rbacSchema}.user_queue qu ON qu.queue_id = gq.queue_id AND qu.user_id = $2
-           WHERE  gq.group_id = ANY($1::bigint[])
+           WHERE  gq.department_id = ANY($1::bigint[])
            ORDER  BY q.queue_name`,
           [groupIds, userId]
         );
@@ -494,7 +495,7 @@ export const removeUserQueueModel = async ({ userId, queueId }) => {
 
 /**
  * Fetches paginated users for the overview table.
- * GLOBAL_ADMIN (department_id = NULL) is excluded via INNER JOIN on department.
+ * SysAdmin (department_id = NULL) is excluded via INNER JOIN on department.
  *
  * Per user:
  *   userId, userName, email, roleCode, roleName, departmentName,
@@ -532,7 +533,7 @@ export const getUsersOverviewModel = async ({ departmentId }) => {
 
         -- groupsAssigned:
         --   SUPERUSER & USER → direct groups on this user
-        --   GLOBAL_ADMIN → 0
+        --   SysAdmin → 0
         CASE
           WHEN r.role_code IN ('SUPERUSER', 'USER') THEN (
             SELECT COUNT(DISTINCT ug.group_id)
@@ -545,7 +546,7 @@ export const getUsersOverviewModel = async ({ departmentId }) => {
         -- queuesAssigned:
         --   SUPERUSER → distinct queues via their directly assigned groups
         --   USER      → queues directly assigned in user_queue
-        --   GLOBAL_ADMIN → 0
+        --   SysAdmin → 0
         CASE
           WHEN r.role_code = 'SUPERUSER' THEN (
             SELECT COUNT(DISTINCT gq.queue_id)
@@ -568,7 +569,7 @@ export const getUsersOverviewModel = async ({ departmentId }) => {
 
       JOIN ${rbacSchema}.department d
         ON d.department_id = u.department_id
-      
+    
       ${departmentId ? `WHERE u.department_id = $1` : ''}
     )
 
@@ -881,7 +882,7 @@ export const assignGroupsToUserModel = async ({ userId, groupIds, assignedBy }) 
     if (user.role_code === 'USER') {
       const currentCountRes = await client.query(`SELECT COUNT(*) FROM ${rbacSchema}.user_group WHERE user_id = $1`, [userId]);
       const currentCount = parseInt(currentCountRes.rows[0].count);
-      
+
       // We will do a DELETE of their existing group first if they're a USER to enforce the max 1 rule smoothly
       // Since they can only have 1, we just replace it. 
       // But if they sent multiple groups in this request, we throw an error.
@@ -895,7 +896,7 @@ export const assignGroupsToUserModel = async ({ userId, groupIds, assignedBy }) 
         // Find existing groups
         const existingRes = await client.query(`SELECT group_id FROM ${rbacSchema}.user_group WHERE user_id = $1`, [userId]);
         const existingGroupIds = existingRes.rows.map(r => r.group_id);
-        
+
         // Find associated queues
         const queueRes = await client.query(
           `SELECT DISTINCT gq.queue_id FROM ${rbacSchema}.group_queue gq WHERE gq.group_id = ANY($1::bigint[])`,
@@ -905,7 +906,7 @@ export const assignGroupsToUserModel = async ({ userId, groupIds, assignedBy }) 
 
         // Delete group
         await client.query(`DELETE FROM ${rbacSchema}.user_group WHERE user_id = $1`, [userId]);
-        
+
         // Cascade delete queues
         if (queueIds.length > 0) {
           await client.query(
@@ -1418,13 +1419,14 @@ export const assignQueuesToUserModel = async ({ userId, queueIds, assignedBy }) 
 
     // 2. Validate all queueIds belong to the USER's own group pool
     const validQueues = await client.query(
-      `SELECT DISTINCT gq.queue_id
-       FROM ${rbacSchema}.user_group ug
-       JOIN ${rbacSchema}.group_queue gq ON gq.group_id = ug.group_id
-       WHERE ug.user_id = $1
-         AND gq.queue_id = ANY($2::bigint[])`,
-      [userId, queueIds]
+      `SELECT DISTINCT qd.queue_id
+           FROM ${rbacSchema}.app_user au
+           JOIN ${rbacSchema}.queue_department qd ON au.department_id = qd.department_id
+           WHERE au.user_id = $1
+             AND qd.queue_id = ANY($2::bigint[])`,
+      [userId, queueIds],
     );
+
     if (validQueues.rows.length !== queueIds.length) {
       await client.query("ROLLBACK");
       return { error: "INVALID_QUEUES_FOR_USER" };
@@ -1506,7 +1508,7 @@ export const getUserGroupsModel = async ({ userId }) => {
  * Otherwise, it fetches queues from the DB based on role:
  *  - SUPERUSER: all queues in their assigned groups.
  *  - USER: only queues directly assigned to them.
- * Confidentiality filter: if the user's is_confidential is false, it excludes confidential queues.
+ * Confidentiality filter: if the user's is_sensitive is false, it excludes confidential queues.
  * 
  * @param {number} userId
  * @param {string} roleCode
@@ -1522,34 +1524,44 @@ export const getAllowedQueuesModel = async (userId, roleCode, payloadQueues = []
   const { rbacSchema } = getConfig();
 
   // 1. Check if user is confidential
+  // const userResult = await pool.query(
+  //   `SELECT is_sensitive FROM ${rbacSchema}.app_user WHERE user_id = $1 LIMIT 1`,
+  //   [userId]
+  // );
   const userResult = await pool.query(
-    `SELECT is_confidential FROM ${rbacSchema}.app_user WHERE user_id = $1 LIMIT 1`,
+    `SELECT department_id FROM ${rbacSchema}.app_user WHERE user_id = $1 LIMIT 1`,
     [userId]
   );
-  
+
   // If user doesn't exist, return empty array
   if (!userResult.rows[0]) return [];
-  
-  const isConfidentialUser = userResult.rows[0].is_confidential === true;
+
+  // const isConfidentialUser = userResult.rows[0].is_sensitive === true;
+  const departmentId = userResult.rows[0].department_id;
 
   // 2. Fetch Normal Queues based on Role (Only non-confidential ones)
   let queuesQuery = '';
-  const queryParams = [userId];
+  const queryParams = roleCode === 'SUPERUSER' ? [departmentId] : [userId];
 
   if (roleCode === 'SUPERUSER') {
     queuesQuery = `
       SELECT DISTINCT q.queue_name
-      FROM ${rbacSchema}.user_group ug
-      JOIN ${rbacSchema}.group_queue gq ON gq.group_id = ug.group_id
-      JOIN ${rbacSchema}.queue q ON q.queue_id = gq.queue_id
-      WHERE ug.user_id = $1 AND q.is_confidential = FALSE
+      FROM ${rbacSchema}.queue q
+      WHERE q.department_id = $1 
     `;
+    // queuesQuery = `
+    //   SELECT DISTINCT q.queue_name
+    //   FROM ${rbacSchema}.user_group ug
+    //   JOIN ${rbacSchema}.group_queue gq ON gq.group_id = ug.group_id
+    //   JOIN ${rbacSchema}.queue q ON q.queue_id = gq.queue_id
+    //   WHERE ug.user_id = $1 
+    // `;
   } else if (roleCode === 'USER') {
     queuesQuery = `
       SELECT DISTINCT q.queue_name
       FROM ${rbacSchema}.user_queue uq
       JOIN ${rbacSchema}.queue q ON q.queue_id = uq.queue_id
-      WHERE uq.user_id = $1 AND q.is_confidential = FALSE
+      WHERE uq.user_id = $1 
     `;
   } else {
     return []; // Other roles don't have direct queue assignments this way
@@ -1559,19 +1571,17 @@ export const getAllowedQueuesModel = async (userId, roleCode, payloadQueues = []
   let allowedQueues = result.rows.map(row => row.queue_name);
 
   // 3. Add confidential queues if user is allowed
-  if (isConfidentialUser) {
-    const confResult = await pool.query(
-      `SELECT queue_name FROM ${rbacSchema}.queue WHERE is_confidential = TRUE`
-    );
-    const confQueues = confResult.rows.map(row => row.queue_name);
-    
-    // Combine both and remove any duplicates
-    allowedQueues = [...new Set([...allowedQueues, ...confQueues])];
-  }
+  // if (isConfidentialUser) {
+  //   const confResult = await pool.query(
+  //     `SELECT queue_name FROM ${rbacSchema}.queue WHERE is_sensitive = TRUE`
+  //   );
+  //   const confQueues = confResult.rows.map(row => row.queue_name);
+
+  //   // Combine both and remove any duplicates
+  //   allowedQueues = [...new Set([...allowedQueues, ...confQueues])];
+  // }
 
   // If allowedQueues is empty, we return [] directly.
   // The controller handles this to short-circuit and avoid DB fetches.
-  return allowedQueues;
-
   return allowedQueues;
 };

@@ -23,7 +23,7 @@ const router = express.Router();
  * }
  */
 router.post("/add-group",
-    // authenticateJwt,
+    authenticateJwt,
     validate(addGroupSchema),
     addGroup);
 
@@ -34,7 +34,7 @@ router.post("/add-group",
  * Returns all departments with admin name + stats.
  */
 router.post("/get-departments",
-    //  authenticateJwt,
+     authenticateJwt,
     validate(getDepartmentsSchema),
     getDepartments);
 
@@ -62,7 +62,7 @@ router.post("/get-departments",
  * }
  */
 router.post("/add-user",
-    // authenticateJwt,
+    authenticateJwt,
     validate(addUserSchema),
     addUser);
 
@@ -71,7 +71,7 @@ router.post("/add-user",
  * Protected. Body: { userId: number, isActive: boolean }
  */
 router.post("/toggle-user-status",
-    // authenticateJwt,
+    authenticateJwt,
     validate(toggleUserStatusSchema),
     toggleUserStatus);
 
@@ -81,7 +81,7 @@ router.post("/toggle-user-status",
  * groupId takes precedence; otherwise departmentId is required.
  */
 router.post("/get-queues",
-    // authenticateJwt,
+    authenticateJwt,
     validate(getQueuesSchema),
     getQueues);
 
@@ -91,7 +91,7 @@ router.post("/get-queues",
  * All users across all/one department.
  */
 router.post("/get-users",
-    // authenticateJwt,
+    authenticateJwt,
     validate(getUsersSchema),
     getUsers);
 
@@ -100,7 +100,7 @@ router.post("/get-users",
  * Protected. Body: { departmentId? }
  */
 router.post("/get-groups",
-    // authenticateJwt,
+    authenticateJwt,
     validate(getGroupsSchema),
     getGroups);
 
@@ -113,7 +113,7 @@ router.post("/get-groups",
  * }
  */
 router.post("/add-queues-to-group",
-    // authenticateJwt,
+    authenticateJwt,
     validate(addQueuesToGroupSchema),
     addQueuesToGroup);
 
@@ -122,7 +122,7 @@ router.post("/add-queues-to-group",
  * Body: { userId: number, groupIds: number[] }
  */
 router.post("/assign-group-to-user",
-    // authenticateJwt,
+    authenticateJwt,
     validate(assignGroupsToUserSchema),
     assignGroupsToUser);
 
@@ -132,7 +132,7 @@ router.post("/assign-group-to-user",
  * Partial update — only provided fields are changed.
  */
 router.post("/edit-user",
-    // authenticateJwt,
+    authenticateJwt,
     validate(editUserSchema),
     editUser);
 
@@ -142,7 +142,7 @@ router.post("/edit-user",
  * Returns full group details with queues and direct user count.
  */
 router.post("/get-group-details",
-    // authenticateJwt,
+    authenticateJwt,
     validate(getGroupDetailsSchema),
     getGroupDetails);
 
@@ -151,7 +151,7 @@ router.post("/get-group-details",
  * Body: { groupId: number, queueIds: number[] }
  */
 router.post("/remove-queues-from-group",
-    // authenticateJwt,
+    authenticateJwt,
     validate(removeQueuesFromGroupSchema),
     removeQueuesFromGroup);
 
@@ -160,7 +160,7 @@ router.post("/remove-queues-from-group",
  * Body: { groupId: number, groupName?: string, groupDescription?: string }
  */
 router.post("/edit-group",
-    // authenticateJwt,
+    authenticateJwt,
     validate(editGroupSchema),
     editGroup);
 
@@ -169,7 +169,7 @@ router.post("/edit-group",
  * Body: { userId: number }
  */
 router.post("/get-user-details",
-    // authenticateJwt,
+    authenticateJwt,
     validate(getUserDetailsSchema),
     getUserDetails);
 
@@ -178,7 +178,7 @@ router.post("/get-user-details",
  * Body: { userId: number, groupIds: number[] }
  */
 router.post("/remove-groups-from-user",
-    // authenticateJwt,
+    authenticateJwt,
     validate(removeGroupsFromUserSchema),
     removeGroupsFromUser);
 
@@ -188,7 +188,7 @@ router.post("/remove-groups-from-user",
  * Global Admin assigns specific queues (from Superuser's pool) to a regular USER.
  */
 router.post("/assign-queues-to-user",
-    // authenticateJwt,
+    authenticateJwt,
     validate(assignQueuesToUserSchema),
     assignQueuesToUser);
 
@@ -198,7 +198,7 @@ router.post("/assign-queues-to-user",
  * Global Admin removes direct queue assignments from a USER.
  */
 router.post("/remove-queues-from-user",
-    // authenticateJwt,
+    authenticateJwt,
     validate(removeQueuesFromUserSchema),
     removeQueuesFromUser);
 
@@ -208,7 +208,7 @@ router.post("/remove-queues-from-user",
  * Fetch all groups assigned to a specific user (superuser).
  */
 router.post("/get-user-groups",
-    // authenticateJwt,
+    authenticateJwt,
     validate(getUserGroupsSchema),
     getUserGroups);
 

@@ -66,9 +66,9 @@ export const addUser = asyncWrapper(async (req, res) => {
  * isActive=false → deactivate user
  */
 export const toggleUserStatus = asyncWrapper(async (req, res) => {
-  const { userId, isActive } = req.body ?? {};
+  const { userId, isActive,updatedBy } = req.body ?? {};
 
-  const updatedBy = req.user?.email || 1;
+  // const updatedBy = req.user?.email || 1;
 
   const result = await toggleUserStatusService({ userId, isActive, updatedBy });
 
@@ -214,8 +214,8 @@ export const editUser = asyncWrapper(async (req, res) => {
   });
 
   if (result?.error === "USER_NOT_FOUND") return res.sendResponse(MESSAGES.userNotFound);
-  if (result?.error === "INVALID_ROLE")   return res.sendResponse(MESSAGES.validationError);
-  if (result?.error === "NO_CHANGES")     return res.sendResponse(MESSAGES.validationError);
+  if (result?.error === "INVALID_ROLE") return res.sendResponse(MESSAGES.validationError);
+  if (result?.error === "NO_CHANGES") return res.sendResponse(MESSAGES.validationError);
 
   return res.sendResponse(MESSAGES.userUpdated, { userId: result.userId });
 });
@@ -325,7 +325,7 @@ export const assignQueuesToUser = asyncWrapper(async (req, res) => {
   if (result?.error === "SUPERUSER_REQUIRED_FOR_QUEUE_ASSIGN") return res.sendResponse(MESSAGES.validationError);
   if (result?.error === "INVALID_QUEUES_FOR_USER") return res.sendResponse(MESSAGES.invalidQueuesForUser);
 
-  return res.sendResponse(MESSAGES.queuesAssignedToUser, { inserted: result.inserted });
+  return res.sendResponse(MESSAGES.queuesAssigned, { inserted: result.inserted });
 });
 
 /**
@@ -342,7 +342,7 @@ export const removeQueuesFromUser = asyncWrapper(async (req, res) => {
     return res.sendResponse(MESSAGES.userNotFound);
   }
 
-  return res.sendResponse(MESSAGES.queuesRemovedFromUser, { deleted: result.deleted });
+  return res.sendResponse(MESSAGES.queueRemoved, { deleted: result.deleted });
 });
 
 /**
