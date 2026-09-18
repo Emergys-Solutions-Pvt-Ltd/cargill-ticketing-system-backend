@@ -1,4 +1,4 @@
-import { getDepartmentStatsModel, addUserModel, toggleUserStatusModel, getQueuesModel, getUsersOverviewModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel, assignGroupsToUserModel, removeGroupsFromUserModel, editUserModel, getGroupDetailsModel, removeQueuesFromGroupModel, editGroupModel, getUserDetailsModel, assignQueuesToUserModel, removeQueuesFromUserModel, getUserGroupsModel, assignDeptsToUserModel, removeDeptsFromUserModel, getOtherDeptUsersModel } from "./rbac.model.js";
+import { getDepartmentStatsModel, addUserModel, toggleUserStatusModel, getQueuesModel, getUsersOverviewModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel, assignGroupsToUserModel, removeGroupsFromUserModel, editUserModel, getGroupDetailsModel, removeQueuesFromGroupModel, editGroupModel, getUserDetailsModel, assignQueuesToUserModel, removeQueuesFromUserModel, getUserGroupsModel, assignDeptToUsersModel, removeDeptsFromUserModel, getOtherDeptUsersModel } from "./rbac.model.js";
 import { getConfig } from "../../config/env.config.js";
 
 /**
@@ -343,14 +343,15 @@ export const getUserGroupsService = async ({ userId }) => {
 };
 
 /**
- * Assigns departments to a user via user_dept junction table.
+ * Assigns a single department (and queues) to multiple users via user_dept junction table.
  *
- * @param {{ userId: number, deptIds: number[], assignedBy: number }} data
- * @returns {Promise<{ inserted: number } | { error: string }>}
+ * @param {{ userIds: number[], departmentId: number, queueIds: number[], assignedBy: number }} data
+ * @returns {Promise<{ insertedDepts: number, insertedQueues: number } | { error: string }>}
  */
-export const assignDeptsToUserService = async ({ userId, deptIds, assignedBy }) => {
-  const uniqueDeptIds = [...new Set(deptIds)];
-  return assignDeptsToUserModel({ userId, deptIds: uniqueDeptIds, assignedBy });
+export const assignDeptToUsersService = async ({ userIds, departmentId, queueIds, assignedBy }) => {
+  const uniqueUserIds = [...new Set(userIds)];
+  const uniqueQueueIds = [...new Set(queueIds)];
+  return assignDeptToUsersModel({ userIds: uniqueUserIds, departmentId, queueIds: uniqueQueueIds, assignedBy });
 };
 
 /**

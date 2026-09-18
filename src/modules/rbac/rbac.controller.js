@@ -1,4 +1,4 @@
-import { getDepartmentStatsService, addUserService, toggleUserStatusService, getQueuesService, getUsersOverviewService, getGroupsService, addGroupService, assignQueuesToGroupService, assignGroupsToUserService, removeGroupsFromUserService, editUserService, getGroupDetailsService, removeQueuesFromGroupService, editGroupService, getUserDetailsService, assignQueuesToUserService, removeQueuesFromUserService, getUserGroupsService, assignDeptsToUserService, removeDeptsFromUserService, getOtherDeptUsersService } from "./rbac.service.js";
+import { getDepartmentStatsService, addUserService, toggleUserStatusService, getQueuesService, getUsersOverviewService, getGroupsService, addGroupService, assignQueuesToGroupService, assignGroupsToUserService, removeGroupsFromUserService, editUserService, getGroupDetailsService, removeQueuesFromGroupService, editGroupService, getUserDetailsService, assignQueuesToUserService, removeQueuesFromUserService, getUserGroupsService, assignDeptToUsersService, removeDeptsFromUserService, getOtherDeptUsersService } from "./rbac.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
 import asyncWrapper from "../../utils/asyncWrapper.js";
 
@@ -358,20 +358,21 @@ export const getUserGroups = asyncWrapper(async (req, res) => {
 });
 
 /**
- * POST /api/v1/rbac/assign-departments-to-user
- * Body: { userId: number, deptIds: number[] }
- * Assigns additional departments to an existing user.
+ * POST /api/v1/rbac/assign-dept-to-users
+ * Body: { userIds: number[], departmentId: number, queueIds?: number[] }
+ * Assigns a department (and optional queues) to multiple existing users.
  */
-export const assignDeptsToUser = asyncWrapper(async (req, res) => {
-  const { userId, deptIds = [] } = req.body ?? {};
+export const assignDeptToUsers = asyncWrapper(async (req, res) => {
+  const { userIds = [], departmentId, queueIds = [] } = req.body ?? {};
   const assignedBy = req.user?.userId || 1;
 
-  const result = await assignDeptsToUserService({ userId, deptIds, assignedBy });
+  const result = await assignDeptToUsersService({ userIds, departmentId, queueIds, assignedBy });
 
   if (result?.error === "USER_NOT_FOUND") return res.sendResponse(MESSAGES.userNotFound);
   if (result?.error === "INVALID_DEPARTMENT") return res.sendResponse(MESSAGES.invalidDepartment);
+  if (result?.error === "INVALID_QUEUES_FOR_DEPT") return res.sendResponse(MESSAGES.invalidQueues);
 
-  return res.sendResponse(MESSAGES.departmentAssigned || "Departments assigned", { inserted: result.inserted });
+  return res.sendResponse(MESSAGES.departmentAssigned || "Department assigned to users", { insertedDepts: result.insertedDepts, insertedQueues: result.insertedQueues });
 });
 
 /**

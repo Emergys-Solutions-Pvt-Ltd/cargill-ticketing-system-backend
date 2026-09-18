@@ -114,9 +114,10 @@ export const getUserGroupsSchema = Joi.object({
   userId: Joi.number().integer().positive().required(),
 });
 
-export const assignDeptsToUserSchema = Joi.object({
-  userId: Joi.number().integer().positive().required(),
-  deptIds: Joi.array().items(Joi.number().integer().positive()).min(1).required(),
+export const assignDeptToUsersSchema = Joi.object({
+  userIds: Joi.array().items(Joi.number().integer().positive()).min(1).required(),
+  departmentId: Joi.number().integer().positive().required(),
+  queueIds: Joi.array().items(Joi.number().integer().positive()).optional(),
 });
 
 export const removeDeptsFromUserSchema = Joi.object({

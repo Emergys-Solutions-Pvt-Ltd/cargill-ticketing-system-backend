@@ -40,7 +40,8 @@ export const getDepartmentStatsModel = async (departmentId = null) => {
       COUNT(DISTINCT g.group_id) AS "groupCount"
 
     FROM ${rbacSchema}.department d
-    LEFT JOIN ${rbacSchema}.app_user u ON u.department_id = d.department_id
+    LEFT JOIN ${rbacSchema}.user_dept ud ON ud.dept_id = d.department_id
+    LEFT JOIN ${rbacSchema}.app_user u ON u.user_id = ud.user_id
     LEFT JOIN ${rbacSchema}.role     r ON r.role_id       = u.role_id
     LEFT JOIN ${rbacSchema}.groups   g
       ON  g.department_id = d.department_id
@@ -638,13 +639,14 @@ export const getDepartmentSupervisorsModel = async () => {
 
     -- Subquery isolates SUPERVISOR users only — LEFT JOIN ensures dept always shows
     LEFT   JOIN (
-      SELECT au.user_id, au.user_name, au.department_id
+      SELECT au.user_id, au.user_name, ud.dept_id
       FROM   ${rbacSchema}.app_user au
+      JOIN   ${rbacSchema}.user_dept ud ON ud.user_id = au.user_id
       JOIN   ${rbacSchema}.role r
              ON  r.role_id   = au.role_id
              AND r.role_code = 'SUPERVISOR'
       WHERE  au.is_active = TRUE
-    ) sup ON sup.department_id = d.department_id
+    ) sup ON sup.dept_id = d.department_id
 
     WHERE  d.is_active = TRUE
 
@@ -1562,13 +1564,13 @@ export const getAllowedQueuesModel = async (userId, roleCode, payloadQueues = []
 };
 
 /**
- * Assigns departments to a user via user_dept junction table.
- * Validates all deptIds exist in the department table.
+ * Assigns a single department (and optional queues) to multiple users.
+ * Validates department exists, users exist, and queues belong to the department.
  *
- * @param {{ userId: number, deptIds: number[], assignedBy: number }} params
- * @returns {Promise<{ inserted: number } | { error: string }>}
+ * @param {{ userIds: number[], departmentId: number, queueIds: number[], assignedBy: number }} params
+ * @returns {Promise<{ insertedDepts: number, insertedQueues: number } | { error: string }>}
  */
-export const assignDeptsToUserModel = async ({ userId, deptIds, assignedBy }) => {
+export const assignDeptToUsersModel = async ({ userIds, departmentId, queueIds = [], assignedBy }) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
   const client = await pool.connect();
@@ -1576,37 +1578,70 @@ export const assignDeptsToUserModel = async ({ userId, deptIds, assignedBy }) =>
   try {
     await client.query("BEGIN");
 
-    // 1. Check user exists
-    const userCheck = await client.query(
-      `SELECT user_id FROM ${rbacSchema}.app_user WHERE user_id = $1 LIMIT 1`,
-      [userId]
-    );
-    if (!userCheck.rows[0]) {
-      await client.query("ROLLBACK");
-      return { error: "USER_NOT_FOUND" };
-    }
-
-    // 2. Validate all deptIds exist
+    // 1. Validate departmentId exists
     const deptCheck = await client.query(
-      `SELECT department_id FROM ${rbacSchema}.department WHERE department_id = ANY($1::bigint[])`,
-      [deptIds]
+      `SELECT department_id FROM ${rbacSchema}.department WHERE department_id = $1 LIMIT 1`,
+      [departmentId]
     );
-    if (deptCheck.rows.length !== deptIds.length) {
+    if (!deptCheck.rows[0]) {
       await client.query("ROLLBACK");
       return { error: "INVALID_DEPARTMENT" };
     }
 
-    // 3. Bulk insert, skip duplicates
-    const result = await client.query(
+    // 2. Validate all userIds exist
+    const userCheck = await client.query(
+      `SELECT user_id FROM ${rbacSchema}.app_user WHERE user_id = ANY($1::bigint[])`,
+      [userIds]
+    );
+    if (userCheck.rows.length !== userIds.length) {
+      await client.query("ROLLBACK");
+      return { error: "USER_NOT_FOUND" };
+    }
+
+    // 3. Bulk insert departments, skip duplicates
+    const deptResult = await client.query(
       `INSERT INTO ${rbacSchema}.user_dept (user_id, dept_id, assigned_by, assigned_at)
-       SELECT $1, d.dept_id, $2, CURRENT_TIMESTAMP
-       FROM unnest($3::bigint[]) AS d(dept_id)
+       SELECT u.user_id, $1, $2, CURRENT_TIMESTAMP
+       FROM unnest($3::bigint[]) AS u(user_id)
        ON CONFLICT (user_id, dept_id) DO NOTHING`,
-      [userId, assignedBy, deptIds]
+      [departmentId, assignedBy, userIds]
     );
 
+    let insertedQueues = 0;
+
+    // 4. Validate and assign queues if provided
+    if (queueIds.length > 0) {
+      // Validate all queueIds belong to the department being assigned
+      const validQueues = await client.query(
+        `SELECT queue_id
+         FROM ${rbacSchema}.queue_department
+         WHERE department_id = $1
+           AND queue_id = ANY($2::bigint[])`,
+        [departmentId, queueIds]
+      );
+      if (validQueues.rows.length !== queueIds.length) {
+        await client.query("ROLLBACK");
+        return { error: "INVALID_QUEUES_FOR_DEPT" };
+      }
+
+      // Generate pairs (userId, queueId) for insert
+      // We can use a CROSS JOIN conceptually
+      const queuesJson = JSON.stringify(
+        userIds.flatMap(uid => queueIds.map(qid => ({ user_id: uid, queue_id: qid })))
+      );
+
+      const queueResult = await client.query(
+        `INSERT INTO ${rbacSchema}.user_queue (user_id, queue_id, assigned_by, assigned_at)
+         SELECT pair.user_id, pair.queue_id, $1, CURRENT_TIMESTAMP
+         FROM jsonb_to_recordset($2::jsonb) AS pair(user_id BIGINT, queue_id BIGINT)
+         ON CONFLICT (user_id, queue_id) DO NOTHING`,
+        [assignedBy, queuesJson]
+      );
+      insertedQueues = queueResult.rowCount;
+    }
+
     await client.query("COMMIT");
-    return { inserted: result.rowCount };
+    return { insertedDepts: deptResult.rowCount, insertedQueues };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

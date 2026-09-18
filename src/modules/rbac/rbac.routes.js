@@ -1,5 +1,5 @@
 import express from "express";
-import { getDepartments, addUser, toggleUserStatus, getQueues, getUsers, getGroups, addGroup, addQueuesToGroup, assignGroupsToUser, removeGroupsFromUser, editUser, getGroupDetails, removeQueuesFromGroup, editGroup, getUserDetails, assignQueuesToUser, removeQueuesFromUser, getUserGroups, assignDeptsToUser, removeDeptsFromUser, getOtherDeptUsers } from "./rbac.controller.js";
+import { getDepartments, addUser, toggleUserStatus, getQueues, getUsers, getGroups, addGroup, addQueuesToGroup, assignGroupsToUser, removeGroupsFromUser, editUser, getGroupDetails, removeQueuesFromGroup, editGroup, getUserDetails, assignQueuesToUser, removeQueuesFromUser, getUserGroups, assignDeptToUsers, removeDeptsFromUser, getOtherDeptUsers } from "./rbac.controller.js";
 import { authenticateJwt } from "../../middlewares/auth.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import {
@@ -8,7 +8,7 @@ import {
   addQueuesToGroupSchema, assignGroupsToUserSchema, editUserSchema, getGroupDetailsSchema,
   removeQueuesFromGroupSchema, editGroupSchema, getUserDetailsSchema, removeGroupsFromUserSchema,
   assignQueuesToUserSchema, removeQueuesFromUserSchema, getUserGroupsSchema,
-  assignDeptsToUserSchema, removeDeptsFromUserSchema, getOtherDeptUsersSchema
+  assignDeptToUsersSchema, removeDeptsFromUserSchema, getOtherDeptUsersSchema
 } from "./rbac.validation.js";
 
 const router = express.Router();
@@ -214,13 +214,13 @@ router.post("/get-user-groups",
     getUserGroups);
 
 /**
- * POST /api/v1/rbac/assign-departments-to-user
- * Body: { userId: number, deptIds: number[] }
+ * POST /api/v1/rbac/assign-dept-to-users
+ * Body: { userIds: number[], departmentId: number, queueIds?: number[] }
  */
-router.post("/assign-departments-to-user",
+router.post("/assign-dept-to-users",
     authenticateJwt,
-    validate(assignDeptsToUserSchema),
-    assignDeptsToUser);
+    validate(assignDeptToUsersSchema),
+    assignDeptToUsers);
 
 /**
  * POST /api/v1/rbac/remove-departments-from-user
