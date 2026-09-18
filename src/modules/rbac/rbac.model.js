@@ -177,7 +177,7 @@ export const getDepartmentStatsModel = async (departmentId = null) => {
 //   return result.rows;
 // };
 
-export const addUserModel = async ({ roleCode, userName, email, phoneNo, departmentId, assignedGroupIds = [], assignedQueueIds = [], createdBy }) => {
+export const addUserModel = async ({ roleCode, userName, email, phoneNo, departmentIds = [], assignedGroupIds = [], assignedQueueIds = [], createdBy }) => {
   const pool = getPool();
   const { rbacSchema } = getConfig();
   const client = await pool.connect();
@@ -195,7 +195,19 @@ export const addUserModel = async ({ roleCode, userName, email, phoneNo, departm
       return { error: "EMAIL_EXISTS" };
     }
 
-    // 2. Resolve role_id from roleCode
+    // 2. Validate all departmentIds exist
+    if (departmentIds.length > 0) {
+      const deptCheck = await client.query(
+        `SELECT department_id FROM ${rbacSchema}.department WHERE department_id = ANY($1::bigint[])`,
+        [departmentIds]
+      );
+      if (deptCheck.rows.length !== departmentIds.length) {
+        await client.query("ROLLBACK");
+        return { error: "INVALID_DEPARTMENT" };
+      }
+    }
+
+    // 3. Resolve role_id from roleCode
     const roleResult = await client.query(
       `SELECT role_id FROM ${rbacSchema}.role WHERE role_code = $1 LIMIT 1`,
       [roleCode]
@@ -206,21 +218,33 @@ export const addUserModel = async ({ roleCode, userName, email, phoneNo, departm
     }
     const roleId = roleResult.rows[0].role_id;
 
+    // 4. Insert user (no department_id column — use user_dept junction table)
     const insertResult = await client.query(
       `INSERT INTO ${rbacSchema}.app_user
-         (user_name, email, phone_no, role_id, department_id, is_active, created_by, created_at)
-       VALUES ($1, $2, $3, $4, $5, TRUE, $6, CURRENT_TIMESTAMP)
+         (user_name, email, phone_no, role_id, is_active, created_by, created_at)
+       VALUES ($1, $2, $3, $4, TRUE, $5, CURRENT_TIMESTAMP)
        RETURNING user_id`,
-      [userName, email, phoneNo ?? null, roleId, departmentId, createdBy]
+      [userName, email, phoneNo ?? null, roleId, createdBy]
     );
     const userId = insertResult.rows[0].user_id;
+
+    // 5. Bulk-insert department mappings into user_dept
+    if (departmentIds.length > 0) {
+      await client.query(
+        `INSERT INTO ${rbacSchema}.user_dept (user_id, dept_id, assigned_by, assigned_at)
+         SELECT $1, d.dept_id, $2, CURRENT_TIMESTAMP
+         FROM unnest($3::bigint[]) AS d(dept_id)
+         ON CONFLICT (user_id, dept_id) DO NOTHING`,
+        [userId, createdBy, departmentIds]
+      );
+    }
 
     if (roleCode === 'USER' && assignedGroupIds.length > 1) {
       await client.query("ROLLBACK");
       return { error: "TOO_MANY_GROUPS_FOR_USER" };
     }
 
-    // 4. Assign groups for SUPERUSER (multiple) or USER (max 1)
+    // 6. Assign groups for SUPERUSER (multiple) or USER (max 1)
     if (assignedGroupIds.length > 0) {
       const groupsJson = JSON.stringify(
         assignedGroupIds.map((id) => ({ group_id: id }))
@@ -235,14 +259,14 @@ export const addUserModel = async ({ roleCode, userName, email, phoneNo, departm
     }
 
     if (roleCode === 'USER') {
-      // 5. USER: assign queues if provided — must belong to their assigned group
+      // 7. USER: assign queues if provided — must belong to one of user's departments
       if (assignedQueueIds.length > 0) {
-        // Validate queues are accessible via the USER's group
+        // Validate queues are accessible via the USER's assigned departments
         const validQueues = await client.query(
           `SELECT DISTINCT qd.queue_id
-           FROM ${rbacSchema}.app_user au
-           JOIN ${rbacSchema}.queue_department qd ON au.department_id = qd.department_id
-           WHERE au.user_id = $1
+           FROM ${rbacSchema}.user_dept ud
+           JOIN ${rbacSchema}.queue_department qd ON qd.department_id = ud.dept_id
+           WHERE ud.user_id = $1
              AND qd.queue_id = ANY($2::bigint[])`,
           [userId, assignedQueueIds],
         );
@@ -526,51 +550,43 @@ export const getUsersOverviewModel = async ({ departmentId }) => {
         u.work_location      AS "workLocation",
         r.role_code          AS "roleCode",
         r.role_name          AS "roleName",
-        d.department_id      AS "departmentId",
-        d.department_name    AS "departmentName",
         u.is_active          AS "isActive",
         u.last_login_at      AS "lastLogin",
 
-        -- groupsAssigned:
-        --   SUPERUSER & USER → direct groups on this user
-        --   SysAdmin → 0
-        CASE
-          WHEN r.role_code IN ('SUPERUSER', 'USER') THEN (
-            SELECT COUNT(DISTINCT ug.group_id)
-            FROM ${rbacSchema}.user_group ug
-            WHERE ug.user_id = u.user_id
-          )
-          ELSE 0
-        END AS "groupsAssigned",
+        -- departments: aggregated from user_dept junction table
+        (
+          SELECT json_agg(json_build_object(
+            'departmentId', d2.department_id,
+            'departmentName', d2.department_name
+          ) ORDER BY d2.department_name)
+          FROM ${rbacSchema}.user_dept ud2
+          JOIN ${rbacSchema}.department d2 ON d2.department_id = ud2.dept_id
+          WHERE ud2.user_id = u.user_id
+        ) AS "departments",
 
-        -- queuesAssigned:
-        --   SUPERUSER → distinct queues via their directly assigned groups
-        --   USER      → queues directly assigned in user_queue
-        --   SysAdmin → 0
-        CASE
-          WHEN r.role_code = 'SUPERUSER' THEN (
-            SELECT COUNT(DISTINCT gq.queue_id)
-            FROM ${rbacSchema}.user_group ug
-            JOIN ${rbacSchema}.group_queue gq ON gq.group_id = ug.group_id
-            WHERE ug.user_id = u.user_id
-          )
-          WHEN r.role_code = 'USER' THEN (
-            SELECT COUNT(DISTINCT qu.queue_id)
-            FROM ${rbacSchema}.user_queue qu
-            WHERE qu.user_id = u.user_id
-          )
-          ELSE 0
-        END AS "queuesAssigned"
+        -- groupsAssigned: direct groups on this user
+        (
+          SELECT COUNT(DISTINCT ug.group_id)
+          FROM ${rbacSchema}.user_group ug
+          WHERE ug.user_id = u.user_id
+        ) AS "groupsAssigned",
+
+        -- queuesAssigned: all queues directly assigned in user_queue
+        (
+          SELECT COUNT(DISTINCT qu.queue_id)
+          FROM ${rbacSchema}.user_queue qu
+          WHERE qu.user_id = u.user_id
+        ) AS "queuesAssigned"
 
       FROM ${rbacSchema}.app_user u
 
       JOIN ${rbacSchema}.role r
         ON r.role_id = u.role_id
 
-      JOIN ${rbacSchema}.department d
-        ON d.department_id = u.department_id
-    
-      ${departmentId ? `WHERE u.department_id = $1` : ''}
+      ${departmentId ? `WHERE EXISTS (
+        SELECT 1 FROM ${rbacSchema}.user_dept ud
+        WHERE ud.user_id = u.user_id AND ud.dept_id = $1
+      )` : ''}
     )
 
     SELECT
@@ -582,7 +598,6 @@ export const getUsersOverviewModel = async ({ departmentId }) => {
     FROM base b
 
     ORDER BY
-      b."departmentName",
       b."roleCode",
       b."userName"
   `;
@@ -863,9 +878,9 @@ export const assignGroupsToUserModel = async ({ userId, groupIds, assignedBy }) 
   try {
     await client.query("BEGIN");
 
-    // 1. Fetch user — must exist, be active, and be SUPERUSER
+    // 1. Fetch user — must exist, be active
     const userResult = await client.query(
-      `SELECT u.user_id, u.department_id, r.role_code
+      `SELECT u.user_id, r.role_code
        FROM ${rbacSchema}.app_user u
        JOIN ${rbacSchema}.role r ON r.role_id = u.role_id
        WHERE u.user_id = $1
@@ -917,14 +932,15 @@ export const assignGroupsToUserModel = async ({ userId, groupIds, assignedBy }) 
       }
     }
 
-    // 2. Validate groups belong to same department and are active
+    // 2. Validate groups belong to one of the user's departments and are active
     const groupsResult = await client.query(
-      `SELECT group_id
-       FROM ${rbacSchema}.groups
-       WHERE group_id = ANY($1::bigint[])
-         AND department_id = $2
-         AND is_active = TRUE`,
-      [groupIds, user.department_id]
+      `SELECT g.group_id
+       FROM ${rbacSchema}.groups g
+       JOIN ${rbacSchema}.user_dept ud ON ud.dept_id = g.department_id
+       WHERE g.group_id = ANY($1::bigint[])
+         AND ud.user_id = $2
+         AND g.is_active = TRUE`,
+      [groupIds, userId]
     );
     if (groupsResult.rows.length !== groupIds.length) {
       await client.query("ROLLBACK");
@@ -1321,12 +1337,9 @@ export const getUserDetailsModel = async (userId) => {
     SELECT
       u.user_id AS "userId", u.user_name AS "userName", u.email, u.phone_no AS "phoneNo",
       u.work_location AS "workLocation", u.created_at AS "createdAt", u.is_active AS "isActive",
-      r.role_code AS "roleCode", r.role_name AS "roleName",
-      d.department_id AS "departmentId",
-      d.department_name AS "departmentName"
+      r.role_code AS "roleCode", r.role_name AS "roleName"
     FROM ${rbacSchema}.app_user u
     JOIN ${rbacSchema}.role r ON r.role_id = u.role_id
-    JOIN ${rbacSchema}.department d ON d.department_id = u.department_id
     WHERE u.user_id = $1
   `;
   const userRes = await pool.query(userQuery, [userId]);
@@ -1334,7 +1347,18 @@ export const getUserDetailsModel = async (userId) => {
 
   const userInfo = userRes.rows[0];
 
-  // 2. Direct Groups (same for all roles now)
+  // 2. Fetch all departments for this user from user_dept
+  const deptsRes = await pool.query(
+    `SELECT d.department_id AS "departmentId", d.department_name AS "departmentName"
+     FROM ${rbacSchema}.user_dept ud
+     JOIN ${rbacSchema}.department d ON d.department_id = ud.dept_id
+     WHERE ud.user_id = $1
+     ORDER BY d.department_name`,
+    [userId]
+  );
+  const departments = deptsRes.rows;
+
+  // 3. Direct Groups
   let groupsQuery;
 
   if (userInfo.roleCode === 'USER') {
@@ -1374,6 +1398,7 @@ export const getUserDetailsModel = async (userId) => {
 
   return {
     userInfo,
+    departments,
     inheritedGroups,
   };
 };
@@ -1417,13 +1442,13 @@ export const assignQueuesToUserModel = async ({ userId, queueIds, assignedBy }) 
       return { error: "NOT_REGULAR_USER" };
     }
 
-    // 2. Validate all queueIds belong to the USER's own group pool
+    // 2. Validate all queueIds belong to one of the USER's assigned departments
     const validQueues = await client.query(
       `SELECT DISTINCT qd.queue_id
-           FROM ${rbacSchema}.app_user au
-           JOIN ${rbacSchema}.queue_department qd ON au.department_id = qd.department_id
-           WHERE au.user_id = $1
-             AND qd.queue_id = ANY($2::bigint[])`,
+       FROM ${rbacSchema}.user_dept ud
+       JOIN ${rbacSchema}.queue_department qd ON qd.department_id = ud.dept_id
+       WHERE ud.user_id = $1
+         AND qd.queue_id = ANY($2::bigint[])`,
       [userId, queueIds],
     );
 
@@ -1503,19 +1528,17 @@ export const getUserGroupsModel = async ({ userId }) => {
 };
 
 /**
- * Returns an array of queue IDs a user is allowed to access.
- * If payloadQueues is provided, it returns them directly (bypassing DB checks as requested).
- * Otherwise, it fetches queues from the DB based on role:
- *  - SUPERUSER: all queues in their assigned groups.
- *  - USER: only queues directly assigned to them.
- * Confidentiality filter: if the user's is_sensitive is false, it excludes confidential queues.
- * 
+ * Returns an array of queue NAMES a user is allowed to access.
+ * If payloadQueues is provided (non-empty), returns them directly (UI-driven filter).
+ * Otherwise, fetches all queues from user_queue for this user across all departments.
+ *
  * @param {number} userId
- * @param {string} roleCode
- * @param {number[]} [payloadQueues]
- * @returns {Promise<number[]>} Array of queue IDs
+ * @param {string} roleCode  (kept for signature compatibility, no longer used for branching)
+ * @param {string[]} [payloadQueues]
+ * @returns {Promise<string[]>} Array of queue names
  */
 export const getAllowedQueuesModel = async (userId, roleCode, payloadQueues = []) => {
+  // If UI sent queues, trust them and skip DB
   if (payloadQueues && payloadQueues.length > 0) {
     return payloadQueues;
   }
@@ -1523,65 +1546,159 @@ export const getAllowedQueuesModel = async (userId, roleCode, payloadQueues = []
   const pool = getPool();
   const { rbacSchema } = getConfig();
 
-  // 1. Check if user is confidential
-  // const userResult = await pool.query(
-  //   `SELECT is_sensitive FROM ${rbacSchema}.app_user WHERE user_id = $1 LIMIT 1`,
-  //   [userId]
-  // );
-  const userResult = await pool.query(
-    `SELECT department_id FROM ${rbacSchema}.app_user WHERE user_id = $1 LIMIT 1`,
+  // All roles: fetch from user_queue directly
+  const result = await pool.query(
+    `SELECT DISTINCT q.queue_name
+     FROM ${rbacSchema}.user_queue uq
+     JOIN ${rbacSchema}.queue q ON q.queue_id = uq.queue_id
+     WHERE uq.user_id = $1
+     ORDER BY q.queue_name`,
     [userId]
   );
 
-  // If user doesn't exist, return empty array
-  if (!userResult.rows[0]) return [];
-
-  // const isConfidentialUser = userResult.rows[0].is_sensitive === true;
-  const departmentId = userResult.rows[0].department_id;
-
-  // 2. Fetch Normal Queues based on Role (Only non-confidential ones)
-  let queuesQuery = '';
-  const queryParams = roleCode === 'SUPERUSER' ? [departmentId] : [userId];
-
-  if (roleCode === 'SUPERUSER') {
-    queuesQuery = `
-      SELECT DISTINCT q.queue_name
-      FROM ${rbacSchema}.queue q
-      WHERE q.department_id = $1 
-    `;
-    // queuesQuery = `
-    //   SELECT DISTINCT q.queue_name
-    //   FROM ${rbacSchema}.user_group ug
-    //   JOIN ${rbacSchema}.group_queue gq ON gq.group_id = ug.group_id
-    //   JOIN ${rbacSchema}.queue q ON q.queue_id = gq.queue_id
-    //   WHERE ug.user_id = $1 
-    // `;
-  } else if (roleCode === 'USER') {
-    queuesQuery = `
-      SELECT DISTINCT q.queue_name
-      FROM ${rbacSchema}.user_queue uq
-      JOIN ${rbacSchema}.queue q ON q.queue_id = uq.queue_id
-      WHERE uq.user_id = $1 
-    `;
-  } else {
-    return []; // Other roles don't have direct queue assignments this way
-  }
-
-  const result = await pool.query(queuesQuery, queryParams);
-  let allowedQueues = result.rows.map(row => row.queue_name);
-
-  // 3. Add confidential queues if user is allowed
-  // if (isConfidentialUser) {
-  //   const confResult = await pool.query(
-  //     `SELECT queue_name FROM ${rbacSchema}.queue WHERE is_sensitive = TRUE`
-  //   );
-  //   const confQueues = confResult.rows.map(row => row.queue_name);
-
-  //   // Combine both and remove any duplicates
-  //   allowedQueues = [...new Set([...allowedQueues, ...confQueues])];
-  // }
-
   // If allowedQueues is empty, we return [] directly.
   // The controller handles this to short-circuit and avoid DB fetches.
-  return allowedQueues;
+  return result.rows.map(row => row.queue_name);
+};
+
+/**
+ * Assigns departments to a user via user_dept junction table.
+ * Validates all deptIds exist in the department table.
+ *
+ * @param {{ userId: number, deptIds: number[], assignedBy: number }} params
+ * @returns {Promise<{ inserted: number } | { error: string }>}
+ */
+export const assignDeptsToUserModel = async ({ userId, deptIds, assignedBy }) => {
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    // 1. Check user exists
+    const userCheck = await client.query(
+      `SELECT user_id FROM ${rbacSchema}.app_user WHERE user_id = $1 LIMIT 1`,
+      [userId]
+    );
+    if (!userCheck.rows[0]) {
+      await client.query("ROLLBACK");
+      return { error: "USER_NOT_FOUND" };
+    }
+
+    // 2. Validate all deptIds exist
+    const deptCheck = await client.query(
+      `SELECT department_id FROM ${rbacSchema}.department WHERE department_id = ANY($1::bigint[])`,
+      [deptIds]
+    );
+    if (deptCheck.rows.length !== deptIds.length) {
+      await client.query("ROLLBACK");
+      return { error: "INVALID_DEPARTMENT" };
+    }
+
+    // 3. Bulk insert, skip duplicates
+    const result = await client.query(
+      `INSERT INTO ${rbacSchema}.user_dept (user_id, dept_id, assigned_by, assigned_at)
+       SELECT $1, d.dept_id, $2, CURRENT_TIMESTAMP
+       FROM unnest($3::bigint[]) AS d(dept_id)
+       ON CONFLICT (user_id, dept_id) DO NOTHING`,
+      [userId, assignedBy, deptIds]
+    );
+
+    await client.query("COMMIT");
+    return { inserted: result.rowCount };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Removes department assignments from a user.
+ * Cascades: removes user_queue entries for queues ONLY accessible via removed depts.
+ *
+ * @param {{ userId: number, deptIds: number[] }} params
+ * @returns {Promise<{ deleted: number } | { error: string }>}
+ */
+export const removeDeptsFromUserModel = async ({ userId, deptIds }) => {
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    // 1. Check user exists
+    const userCheck = await client.query(
+      `SELECT user_id FROM ${rbacSchema}.app_user WHERE user_id = $1 LIMIT 1`,
+      [userId]
+    );
+    if (!userCheck.rows[0]) {
+      await client.query("ROLLBACK");
+      return { error: "USER_NOT_FOUND" };
+    }
+
+    // 2. Find queues that are ONLY accessible via the depts being removed
+    //    (i.e., not accessible via any other dept the user still belongs to)
+    await client.query(
+      `DELETE FROM ${rbacSchema}.user_queue uq
+       WHERE uq.user_id = $1
+         AND uq.queue_id IN (
+           -- Queues in the departments being removed
+           SELECT qd.queue_id
+           FROM ${rbacSchema}.queue_department qd
+           WHERE qd.department_id = ANY($2::bigint[])
+             AND qd.queue_id NOT IN (
+               -- Queues still accessible via user's remaining departments
+               SELECT qd2.queue_id
+               FROM ${rbacSchema}.user_dept ud
+               JOIN ${rbacSchema}.queue_department qd2 ON qd2.department_id = ud.dept_id
+               WHERE ud.user_id = $1
+                 AND ud.dept_id != ALL($2::bigint[])
+             )
+         )`,
+      [userId, deptIds]
+    );
+
+    // 3. Delete the department assignments
+    const result = await client.query(
+      `DELETE FROM ${rbacSchema}.user_dept
+       WHERE user_id = $1 AND dept_id = ANY($2::bigint[])`,
+      [userId, deptIds]
+    );
+
+    await client.query("COMMIT");
+    return { deleted: result.rowCount };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Fetch active users who do NOT belong to the specified department.
+ * @param {number} departmentId 
+ * @returns {Promise<object[]>} Array of users
+ */
+export const getOtherDeptUsersModel = async (departmentId) => {
+  const pool = getPool();
+  const { rbacSchema } = getConfig();
+
+  const query = `
+    SELECT u.user_id AS "userId", u.user_name AS "userName", u.email
+    FROM ${rbacSchema}.app_user u
+    WHERE u.is_active = TRUE
+      AND NOT EXISTS (
+        SELECT 1 FROM ${rbacSchema}.user_dept ud
+        WHERE ud.user_id = u.user_id AND ud.dept_id = $1
+      )
+    ORDER BY u.user_name
+  `;
+
+  const result = await pool.query(query, [departmentId]);
+  return result.rows;
 };

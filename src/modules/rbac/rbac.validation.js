@@ -14,12 +14,13 @@ export const addUserSchema = Joi.object({
   userName: Joi.string().trim().required(),
   email: Joi.string().email().required(),
   phoneNo: Joi.string().trim().optional().allow(""),
-  departmentId: Joi.number().integer().positive().required(),
+  // User can belong to multiple departments
+  departmentIds: Joi.array().items(Joi.number().integer().positive()).min(1).required(),
   // Accepted for all roles in body.
   // SUPERUSER → inserted into user_group (multiple).
   // USER      → inserted into user_group (max 1).
   assignedGroupIds: Joi.array().items(Joi.number().integer().positive()).optional(),
-  // USER only — assigned queues from their group pool.
+  // USER only — assigned queues from their department pool.
   assignedQueueIds: Joi.array().items(Joi.number().integer().positive()).optional(),
 });
 
@@ -111,4 +112,18 @@ export const removeQueuesFromUserSchema = Joi.object({
 
 export const getUserGroupsSchema = Joi.object({
   userId: Joi.number().integer().positive().required(),
+});
+
+export const assignDeptsToUserSchema = Joi.object({
+  userId: Joi.number().integer().positive().required(),
+  deptIds: Joi.array().items(Joi.number().integer().positive()).min(1).required(),
+});
+
+export const removeDeptsFromUserSchema = Joi.object({
+  userId: Joi.number().integer().positive().required(),
+  deptIds: Joi.array().items(Joi.number().integer().positive()).min(1).required(),
+});
+
+export const getOtherDeptUsersSchema = Joi.object({
+  departmentId: Joi.number().integer().positive().required(),
 });

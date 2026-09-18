@@ -1,4 +1,4 @@
-import { getDepartmentStatsModel, addUserModel, toggleUserStatusModel, getQueuesModel, getUsersOverviewModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel, assignGroupsToUserModel, removeGroupsFromUserModel, editUserModel, getGroupDetailsModel, removeQueuesFromGroupModel, editGroupModel, getUserDetailsModel, assignQueuesToUserModel, removeQueuesFromUserModel, getUserGroupsModel } from "./rbac.model.js";
+import { getDepartmentStatsModel, addUserModel, toggleUserStatusModel, getQueuesModel, getUsersOverviewModel, getGroupsModel, addGroupModel, assignQueuesToGroupModel, assignGroupsToUserModel, removeGroupsFromUserModel, editUserModel, getGroupDetailsModel, removeQueuesFromGroupModel, editGroupModel, getUserDetailsModel, assignQueuesToUserModel, removeQueuesFromUserModel, getUserGroupsModel, assignDeptsToUserModel, removeDeptsFromUserModel, getOtherDeptUsersModel } from "./rbac.model.js";
 import { getConfig } from "../../config/env.config.js";
 
 /**
@@ -90,13 +90,13 @@ export const getDepartmentStatsService = async (departmentId = null) => {
 
 /**
  * Inserts a new user. Validates email uniqueness.
- * Assigns groups if provided.
+ * Assigns departments (via user_dept) and groups if provided.
  *
- * @param {{ roleCode, userName, email, phoneNo?, departmentId, assignedGroupIds?, createdBy? }} data
+ * @param {{ roleCode, userName, email, phoneNo?, departmentIds[], assignedGroupIds?, assignedQueueIds?, createdBy? }} data
  * @returns {Promise<{ userId: number } | { error: string }>}
  */
-export const addUserService = async ({ roleCode, userName, email, phoneNo, departmentId, assignedGroupIds = [], assignedQueueIds = [], createdBy }) => {
-  return addUserModel({ roleCode, userName, email, phoneNo, departmentId, assignedGroupIds, assignedQueueIds, createdBy });
+export const addUserService = async ({ roleCode, userName, email, phoneNo, departmentIds = [], assignedGroupIds = [], assignedQueueIds = [], createdBy }) => {
+  return addUserModel({ roleCode, userName, email, phoneNo, departmentIds, assignedGroupIds, assignedQueueIds, createdBy });
 };
 
 /**
@@ -141,8 +141,7 @@ export const getUsersOverviewService = async ({ departmentId } = {}) => {
     workLocation: u.workLocation ?? null,
     roleCode: u.roleCode,
     roleName: u.roleName,
-    departmentId: u.departmentId,
-    departmentName: u.departmentName,
+    departments: u.departments ?? [],        // array of { departmentId, departmentName }
     groupsAssigned: Number(u.groupsAssigned),
     queuesAssigned: Number(u.queuesAssigned),
     isActive: u.isActive,
@@ -341,4 +340,36 @@ export const removeQueuesFromUserService = async ({ userId, queueIds }) => {
  */
 export const getUserGroupsService = async ({ userId }) => {
   return getUserGroupsModel({ userId });
+};
+
+/**
+ * Assigns departments to a user via user_dept junction table.
+ *
+ * @param {{ userId: number, deptIds: number[], assignedBy: number }} data
+ * @returns {Promise<{ inserted: number } | { error: string }>}
+ */
+export const assignDeptsToUserService = async ({ userId, deptIds, assignedBy }) => {
+  const uniqueDeptIds = [...new Set(deptIds)];
+  return assignDeptsToUserModel({ userId, deptIds: uniqueDeptIds, assignedBy });
+};
+
+/**
+ * Removes department assignments from a user.
+ * Cascades: removes orphaned user_queue entries for removed depts.
+ *
+ * @param {{ userId: number, deptIds: number[] }} params
+ * @returns {Promise<{ deleted: number } | { error: string }>}
+ */
+export const removeDeptsFromUserService = async ({ userId, deptIds }) => {
+  const uniqueDeptIds = [...new Set(deptIds)];
+  return removeDeptsFromUserModel({ userId, deptIds: uniqueDeptIds });
+};
+
+/**
+ * Fetch active users who do NOT belong to the specified department.
+ * @param {number} departmentId
+ * @returns {Promise<object[]>}
+ */
+export const getOtherDeptUsersService = async (departmentId) => {
+  return getOtherDeptUsersModel(departmentId);
 };

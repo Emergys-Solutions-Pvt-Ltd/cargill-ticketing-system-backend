@@ -1,4 +1,4 @@
-import { getDepartmentStatsService, addUserService, toggleUserStatusService, getQueuesService, getUsersOverviewService, getGroupsService, addGroupService, assignQueuesToGroupService, assignGroupsToUserService, removeGroupsFromUserService, editUserService, getGroupDetailsService, removeQueuesFromGroupService, editGroupService, getUserDetailsService, assignQueuesToUserService, removeQueuesFromUserService, getUserGroupsService } from "./rbac.service.js";
+import { getDepartmentStatsService, addUserService, toggleUserStatusService, getQueuesService, getUsersOverviewService, getGroupsService, addGroupService, assignQueuesToGroupService, assignGroupsToUserService, removeGroupsFromUserService, editUserService, getGroupDetailsService, removeQueuesFromGroupService, editGroupService, getUserDetailsService, assignQueuesToUserService, removeQueuesFromUserService, getUserGroupsService, assignDeptsToUserService, removeDeptsFromUserService, getOtherDeptUsersService } from "./rbac.service.js";
 import { MESSAGES } from "../../constants/message.constants.js";
 import asyncWrapper from "../../utils/asyncWrapper.js";
 
@@ -30,8 +30,8 @@ export const getDepartments = asyncWrapper(async (req, res) => {
 
 /**
  * POST /api/v1/rbac/add-user
- * Body: { roleCode, userName, email, phoneNo?, departmentId, reportsToUserId?, assignedGroupIds? }
- * assignedGroupIds — array of group IDs.
+ * Body: { roleCode, userName, email, phoneNo?, departmentIds[], reportsToUserId?, assignedGroupIds? }
+ * departmentIds: array of department IDs the user belongs to.
  */
 export const addUser = asyncWrapper(async (req, res) => {
   const {
@@ -39,20 +39,21 @@ export const addUser = asyncWrapper(async (req, res) => {
     userName,
     email,
     phoneNo,
-    departmentId,
-    assignedGroupIds = [],  // all roles: accepted in body; SUPERUSER -> multiple, USER -> max 1
-    assignedQueueIds = [],  // USER only → inserted into user_queue
+    departmentIds = [],          // array — user can belong to multiple depts
+    assignedGroupIds = [],
+    assignedQueueIds = [],
   } = req.body ?? {};
 
   const createdBy = req.user?.userId || 1;
 
   const result = await addUserService({
-    roleCode, userName, email, phoneNo, departmentId,
+    roleCode, userName, email, phoneNo, departmentIds,
     assignedGroupIds, assignedQueueIds, createdBy,
   });
 
   if (result?.error === "EMAIL_EXISTS") return res.sendResponse(MESSAGES.userAlreadyExists);
   if (result?.error === "INVALID_ROLE") return res.sendResponse(MESSAGES.validationError);
+  if (result?.error === "INVALID_DEPARTMENT") return res.sendResponse(MESSAGES.invalidDepartment);
   if (result?.error === "INVALID_QUEUES_FOR_USER") return res.sendResponse(MESSAGES.invalidQueuesForUser);
   if (result?.error === "SUPERUSER_REQUIRED_FOR_QUEUE_ASSIGN") return res.sendResponse(MESSAGES.validationError);
 
@@ -354,4 +355,47 @@ export const getUserGroups = asyncWrapper(async (req, res) => {
   const { userId } = req.body ?? {};
   const result = await getUserGroupsService({ userId });
   return res.sendResponse(MESSAGES.groupsFetched, result);
+});
+
+/**
+ * POST /api/v1/rbac/assign-departments-to-user
+ * Body: { userId: number, deptIds: number[] }
+ * Assigns additional departments to an existing user.
+ */
+export const assignDeptsToUser = asyncWrapper(async (req, res) => {
+  const { userId, deptIds = [] } = req.body ?? {};
+  const assignedBy = req.user?.userId || 1;
+
+  const result = await assignDeptsToUserService({ userId, deptIds, assignedBy });
+
+  if (result?.error === "USER_NOT_FOUND") return res.sendResponse(MESSAGES.userNotFound);
+  if (result?.error === "INVALID_DEPARTMENT") return res.sendResponse(MESSAGES.invalidDepartment);
+
+  return res.sendResponse(MESSAGES.departmentAssigned || "Departments assigned", { inserted: result.inserted });
+});
+
+/**
+ * POST /api/v1/rbac/remove-departments-from-user
+ * Body: { userId: number, deptIds: number[] }
+ * Removes department assignments and cascades orphaned user_queue entries.
+ */
+export const removeDeptsFromUser = asyncWrapper(async (req, res) => {
+  const { userId, deptIds } = req.body ?? {};
+
+  const result = await removeDeptsFromUserService({ userId, deptIds });
+
+  if (result?.error === "USER_NOT_FOUND") return res.sendResponse(MESSAGES.userNotFound);
+
+  return res.sendResponse(MESSAGES.departmentRemoved || "Departments removed", { deleted: result.deleted });
+});
+
+/**
+ * POST /api/v1/rbac/get-other-dept-users
+ * Body: { departmentId: number }
+ * Fetch active users who do NOT belong to the specified department.
+ */
+export const getOtherDeptUsers = asyncWrapper(async (req, res) => {
+  const { departmentId } = req.body ?? {};
+  const result = await getOtherDeptUsersService(departmentId);
+  return res.sendResponse("Users fetched successfully", result);
 });

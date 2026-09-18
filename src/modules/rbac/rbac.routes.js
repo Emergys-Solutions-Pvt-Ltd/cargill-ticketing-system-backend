@@ -1,5 +1,5 @@
 import express from "express";
-import { getDepartments, addUser, toggleUserStatus, getQueues, getUsers, getGroups, addGroup, addQueuesToGroup, assignGroupsToUser, removeGroupsFromUser, editUser, getGroupDetails, removeQueuesFromGroup, editGroup, getUserDetails, assignQueuesToUser, removeQueuesFromUser, getUserGroups } from "./rbac.controller.js";
+import { getDepartments, addUser, toggleUserStatus, getQueues, getUsers, getGroups, addGroup, addQueuesToGroup, assignGroupsToUser, removeGroupsFromUser, editUser, getGroupDetails, removeQueuesFromGroup, editGroup, getUserDetails, assignQueuesToUser, removeQueuesFromUser, getUserGroups, assignDeptsToUser, removeDeptsFromUser, getOtherDeptUsers } from "./rbac.controller.js";
 import { authenticateJwt } from "../../middlewares/auth.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import {
@@ -7,7 +7,8 @@ import {
   getQueuesSchema, getUsersSchema, getGroupsSchema, addGroupSchema,
   addQueuesToGroupSchema, assignGroupsToUserSchema, editUserSchema, getGroupDetailsSchema,
   removeQueuesFromGroupSchema, editGroupSchema, getUserDetailsSchema, removeGroupsFromUserSchema,
-  assignQueuesToUserSchema, removeQueuesFromUserSchema, getUserGroupsSchema
+  assignQueuesToUserSchema, removeQueuesFromUserSchema, getUserGroupsSchema,
+  assignDeptsToUserSchema, removeDeptsFromUserSchema, getOtherDeptUsersSchema
 } from "./rbac.validation.js";
 
 const router = express.Router();
@@ -212,4 +213,31 @@ router.post("/get-user-groups",
     validate(getUserGroupsSchema),
     getUserGroups);
 
-export default router;
+/**
+ * POST /api/v1/rbac/assign-departments-to-user
+ * Body: { userId: number, deptIds: number[] }
+ */
+router.post("/assign-departments-to-user",
+    authenticateJwt,
+    validate(assignDeptsToUserSchema),
+    assignDeptsToUser);
+
+/**
+ * POST /api/v1/rbac/remove-departments-from-user
+ * Body: { userId: number, deptIds: number[] }
+ */
+router.post("/remove-departments-from-user",
+    authenticateJwt,
+    validate(removeDeptsFromUserSchema),
+    removeDeptsFromUser);
+
+/**
+ * POST /api/v1/rbac/get-other-dept-users
+ * Body: { departmentId: number }
+ */
+router.post("/get-other-dept-users",
+    authenticateJwt,
+    validate(getOtherDeptUsersSchema),
+    getOtherDeptUsers);
+
+export default router;
