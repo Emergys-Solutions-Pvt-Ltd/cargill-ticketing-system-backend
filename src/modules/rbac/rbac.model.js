@@ -485,15 +485,28 @@ export const getQueuesModel = async ({ groupId, departmentId, userId }) => {
     return result.rows;
   }
 
-  const result = await pool.query(
-    `SELECT queue_id   AS "queueId",
-            queue_name AS "queueName"
-     FROM   ${rbacSchema}.queue
-     WHERE  department_id = $1
-     ORDER  BY queue_name`,
-    [departmentId]
-  );
+  let deptCondition = '';
+  const params = [];
+  
+  if (departmentId) {
+    const deptIds = Array.isArray(departmentId) ? departmentId : [departmentId];
+    deptCondition = `WHERE qd.department_id = ANY($1::bigint[])`;
+    params.push(deptIds);
+  }
 
+  const query = `
+    SELECT q.queue_id   AS "queueId",
+           q.queue_name AS "queueName",
+           d.department_id AS "departmentId",
+           d.department_name AS "departmentName"
+    FROM   ${rbacSchema}.queue_department qd
+    JOIN   ${rbacSchema}.queue q ON q.queue_id = qd.queue_id
+    JOIN   ${rbacSchema}.department d ON d.department_id = qd.department_id
+    ${deptCondition}
+    ORDER  BY d.department_name, q.queue_name
+  `;
+
+  const result = await pool.query(query, params);
   return result.rows;
 };
 
