@@ -189,31 +189,60 @@ const TASK_COLS = `
     BMCServiceDesk__openDateTime__c::timestamp AS "ticketOpenDate"
 `;
 
-export const queryIncidentTickets = (whereClause, params, pageSize, offset) => {
+// ---------------------------------------------------------------------------
+// Sorting helpers
+// ---------------------------------------------------------------------------
+
+// Maps the JS alias (what frontend sends) → safe SQL expression
+const SORT_COLUMN_MAP = {
+  ticketId:       '"ticketId"',
+  ticketShortDesc:'"ticketShortDesc"',
+  ticketDescription:'"ticketDescription"',
+  ticketType:     '"ticketType"',
+  ticketStatus:   '"ticketStatus"',
+  staffName:      '"staffName"',
+  clientId:       '"clientId"',
+  ticketFormName: '"ticketFormName"',
+  ticketOpenDate: '"ticketOpenDate"',
+};
+
+const buildOrderBy = (sort) => {
+  // Default fallback
+  if (!sort || sort.length === 0) return 'ORDER BY "ticketOpenDate" DESC';
+  const parts = sort.map(({ col, dir }) => {
+    const sqlCol = SORT_COLUMN_MAP[col] ?? '"ticketOpenDate"';
+    const sqlDir = dir === "asc" ? "ASC" : "DESC";
+    return `${sqlCol} ${sqlDir}`;
+  });
+  return `ORDER BY ${parts.join(", ")}`;
+};
+
+
+export const queryIncidentTickets = (whereClause, params, pageSize, offset, sort) => {
   const pool = getPool();
   const { ticketSchema } = getConfig();
   const p = params.length;
   return pool.query(
     `SELECT ${INCIDENT_COLS} FROM ${ticketSchema}.bmcservicedesk__incident__c ${whereClause}
-     ORDER BY "ticketOpenDate" DESC
+     ${buildOrderBy(sort)}
      LIMIT $${p + 1} OFFSET $${p + 2}`,
     [...params, pageSize, offset]
   );
 };
 
-export const queryTaskTickets = (whereClause, params, pageSize, offset) => {
+export const queryTaskTickets = (whereClause, params, pageSize, offset, sort) => {
   const pool = getPool();
   const { ticketSchema } = getConfig();
   const p = params.length;
   return pool.query(
     `SELECT ${TASK_COLS} FROM ${ticketSchema}.bmcservicedesk__task__c ${whereClause}
-     ORDER BY "ticketOpenDate" DESC
+     ${buildOrderBy(sort)}
      LIMIT $${p + 1} OFFSET $${p + 2}`,
     [...params, pageSize, offset]
   );
 };
 
-export const queryUnionTickets = (incWhere, incParams, taskWhere, taskParams, pageSize, offset) => {
+export const queryUnionTickets = (incWhere, incParams, taskWhere, taskParams, pageSize, offset, sort) => {
   const pool = getPool();
   const { ticketSchema } = getConfig();
   const iLen = incParams.length;
@@ -226,12 +255,13 @@ export const queryUnionTickets = (incWhere, incParams, taskWhere, taskParams, pa
       UNION ALL
       SELECT ${TASK_COLS} FROM ${ticketSchema}.bmcservicedesk__task__c ${taskWhereReindexed}
     ) combined
-    ORDER BY "ticketOpenDate" DESC
+    ${buildOrderBy(sort)}
     LIMIT $${iLen + tLen + 1} OFFSET $${iLen + tLen + 2}
   `;
 
   return pool.query(sql, [...incParams, ...taskParams, pageSize, offset]);
 };
+
 
 export const countIncidentTickets = (whereClause, params) => {
   const pool = getPool();
