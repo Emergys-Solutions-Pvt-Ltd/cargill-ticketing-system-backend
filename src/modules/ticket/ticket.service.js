@@ -93,7 +93,7 @@ const mapFormDetails = (row) => ({
  * Fetches paginated, filtered tickets.
  * Automatically selects table mode (INCIDENT_ONLY / TASK_ONLY / UNION).
  */
-export const fetchTickets = async ({ page, pageSize, sort, ...filters }) => {
+export const fetchTickets = async ({ page, pageSize, ...filters }) => {
   const offset = (page - 1) * pageSize;
   const mode   = resolveTableMode(filters);
 
@@ -102,13 +102,13 @@ export const fetchTickets = async ({ page, pageSize, sort, ...filters }) => {
   if (mode === "INCIDENT_ONLY") {
     const { whereClause, params } = buildIncidentWhereClause(filters);
     [dataResult, countResult] = await Promise.all([
-      queryIncidentTickets(whereClause, params, pageSize, offset, sort),
+      queryIncidentTickets(whereClause, params, pageSize, offset),
       countIncidentTickets(whereClause, params),
     ]);
   } else if (mode === "TASK_ONLY") {
     const { whereClause, params } = buildTaskWhereClause(filters);
     [dataResult, countResult] = await Promise.all([
-      queryTaskTickets(whereClause, params, pageSize, offset, sort),
+      queryTaskTickets(whereClause, params, pageSize, offset),
       countTaskTickets(whereClause, params),
     ]);
   } else {
@@ -116,7 +116,7 @@ export const fetchTickets = async ({ page, pageSize, sort, ...filters }) => {
     const inc  = buildIncidentWhereClause(filters);
     const task = buildTaskWhereClause(filters);
     [dataResult, countResult] = await Promise.all([
-      queryUnionTickets(inc.whereClause, inc.params, task.whereClause, task.params, pageSize, offset, sort),
+      queryUnionTickets(inc.whereClause, inc.params, task.whereClause, task.params, pageSize, offset),
       countUnionTickets(inc.whereClause, inc.params, task.whereClause, task.params),
     ]);
   }
