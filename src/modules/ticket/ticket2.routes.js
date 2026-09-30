@@ -18,6 +18,12 @@ const router = express.Router();
  *     sort:     [{ col: string, dir: "asc"|"desc" }]   (optional, up to 5 levels)
  *     ...same filter fields as /get-data
  *   }
+ *
+ * @swagger
+ * /tickets/get-data-v2:
+ *   post:
+ *     summary: Paginated ticket list with multi-level sorting
+ *     tags: [Tickets v2]
  */
 router.post(
   "/get-data-v2",

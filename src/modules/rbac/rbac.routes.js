@@ -13,6 +13,13 @@ import {
 const router = express.Router();
 
 /**
+ * @swagger
+ * tags:
+ *   name: RBAC
+ *   description: Role-based access control — users, groups, queues, departments
+ */
+
+/**
  * POST /api/v1/rbac/add-group
  * Protected. Body:
  * {
@@ -21,6 +28,12 @@ const router = express.Router();
  *  departmentId: number,
  *  assignedQueueIds?: number[],
  * }
+ *
+ * @swagger
+ * /rbac/add-group:
+ *   post:
+ *     summary: Create a new group
+ *     tags: [RBAC]
  */
 router.post("/add-group",
     // authenticateJwt,
@@ -32,21 +45,17 @@ router.post("/add-group",
   * Body: { departmentId? }  — omit for all departments.
  * Protected. No body needed.
  * Returns all departments with admin name + stats.
+ *
+ * @swagger
+ * /rbac/get-departments:
+ *   post:
+ *     summary: Get departments
+ *     tags: [RBAC]
  */
 router.post("/get-departments",
     //  authenticateJwt,
     validate(getDepartmentsSchema),
     getDepartments);
-
-// /**
-//  * POST /api/v1/rbac/get-users
-//  * Protected. Body: { userId?, departmentId? }
-//  * All optional — no body = all users.
-//  */
-// router.post("/get-department-users",
-//     // authenticateJwt,
-//     validate(getDepartmentUsersSchema),
-//     getDepartmentUsers);
 
 /**
  * POST /api/v1/rbac/add-user
@@ -60,6 +69,12 @@ router.post("/get-departments",
  *  reportsToUserId?: number,
  *  assignedGroupIds?: number[],
  * }
+ *
+ * @swagger
+ * /rbac/add-user:
+ *   post:
+ *     summary: Add a new user
+ *     tags: [RBAC]
  */
 router.post("/add-user",
     // authenticateJwt,
@@ -69,6 +84,12 @@ router.post("/add-user",
 /**
  * POST /api/v1/rbac/toggle-user-status
  * Protected. Body: { userId: number, isActive: boolean }
+ *
+ * @swagger
+ * /rbac/toggle-user-status:
+ *   post:
+ *     summary: Activate or deactivate a user
+ *     tags: [RBAC]
  */
 router.post("/toggle-user-status",
     // authenticateJwt,
@@ -79,6 +100,12 @@ router.post("/toggle-user-status",
  * POST /api/v1/rbac/get-queues
  * Body: { groupId?: number, departmentId?: number }
  * groupId takes precedence; otherwise departmentId is required.
+ *
+ * @swagger
+ * /rbac/get-queues:
+ *   post:
+ *     summary: Get queues for a group or department
+ *     tags: [RBAC]
  */
 router.post("/get-queues",
     // authenticateJwt,
@@ -89,6 +116,12 @@ router.post("/get-queues",
  * POST /api/v1/rbac/get-users
  * Body: { departmentId? } (optional)
  * All users across all/one department.
+ *
+ * @swagger
+ * /rbac/get-users:
+ *   post:
+ *     summary: Get all users
+ *     tags: [RBAC]
  */
 router.post("/get-users",
     // authenticateJwt,
@@ -98,6 +131,12 @@ router.post("/get-users",
 /**
  * POST /api/v1/rbac/get-groups
  * Protected. Body: { departmentId? }
+ *
+ * @swagger
+ * /rbac/get-groups:
+ *   post:
+ *     summary: Get groups
+ *     tags: [RBAC]
  */
 router.post("/get-groups",
     // authenticateJwt,
@@ -111,6 +150,12 @@ router.post("/get-groups",
  *  groupId: number,
  *  queueIds: number[],
  * }
+ *
+ * @swagger
+ * /rbac/add-queues-to-group:
+ *   post:
+ *     summary: Assign queues to a group
+ *     tags: [RBAC]
  */
 router.post("/add-queues-to-group",
     // authenticateJwt,
@@ -120,6 +165,12 @@ router.post("/add-queues-to-group",
 /**
  * POST /api/v1/rbac/assign-group-to-user
  * Body: { userId: number, groupIds: number[] }
+ *
+ * @swagger
+ * /rbac/assign-group-to-user:
+ *   post:
+ *     summary: Assign groups to a user
+ *     tags: [RBAC]
  */
 router.post("/assign-group-to-user",
     // authenticateJwt,
@@ -130,6 +181,12 @@ router.post("/assign-group-to-user",
  * POST /api/v1/rbac/edit-user
  * Body: { userId (required), userName?, roleCode?, phoneNo?, reportsToUserId?, workLocation? }
  * Partial update — only provided fields are changed.
+ *
+ * @swagger
+ * /rbac/edit-user:
+ *   post:
+ *     summary: Partially update a user
+ *     tags: [RBAC]
  */
 router.post("/edit-user",
     // authenticateJwt,
@@ -140,6 +197,12 @@ router.post("/edit-user",
  * POST /api/v1/rbac/get-group-details
  * Body: { groupIds: number[] }
  * Returns full group details with queues and direct user count.
+ *
+ * @swagger
+ * /rbac/get-group-details:
+ *   post:
+ *     summary: Get full details for one or more groups
+ *     tags: [RBAC]
  */
 router.post("/get-group-details",
     // authenticateJwt,
@@ -149,6 +212,12 @@ router.post("/get-group-details",
 /**
  * POST /api/v1/rbac/remove-queues-from-group
  * Body: { groupId: number, queueIds: number[] }
+ *
+ * @swagger
+ * /rbac/remove-queues-from-group:
+ *   post:
+ *     summary: Remove queues from a group
+ *     tags: [RBAC]
  */
 router.post("/remove-queues-from-group",
     // authenticateJwt,
@@ -158,6 +227,12 @@ router.post("/remove-queues-from-group",
 /**
  * POST /api/v1/rbac/edit-group
  * Body: { groupId: number, groupName?: string, groupDescription?: string }
+ *
+ * @swagger
+ * /rbac/edit-group:
+ *   post:
+ *     summary: Edit a group
+ *     tags: [RBAC]
  */
 router.post("/edit-group",
     // authenticateJwt,
@@ -167,6 +242,12 @@ router.post("/edit-group",
 /**
  * POST /api/v1/rbac/get-user-details
  * Body: { userId: number }
+ *
+ * @swagger
+ * /rbac/get-user-details:
+ *   post:
+ *     summary: Get details for a specific user
+ *     tags: [RBAC]
  */
 router.post("/get-user-details",
     // authenticateJwt,
@@ -176,6 +257,12 @@ router.post("/get-user-details",
 /**
  * POST /api/v1/rbac/remove-groups-from-user
  * Body: { userId: number, groupIds: number[] }
+ *
+ * @swagger
+ * /rbac/remove-groups-from-user:
+ *   post:
+ *     summary: Remove groups from a user
+ *     tags: [RBAC]
  */
 router.post("/remove-groups-from-user",
     // authenticateJwt,
@@ -186,6 +273,12 @@ router.post("/remove-groups-from-user",
  * POST /api/v1/rbac/assign-queues-to-user
  * Body: { userId: number, queueIds: number[] }
  * Global Admin assigns specific queues (from Superuser's pool) to a regular USER.
+ *
+ * @swagger
+ * /rbac/assign-queues-to-user:
+ *   post:
+ *     summary: Assign direct queues to a user
+ *     tags: [RBAC]
  */
 router.post("/assign-queues-to-user",
     // authenticateJwt,
@@ -196,6 +289,12 @@ router.post("/assign-queues-to-user",
  * POST /api/v1/rbac/remove-queues-from-user
  * Body: { userId: number, queueIds: number[] }
  * Global Admin removes direct queue assignments from a USER.
+ *
+ * @swagger
+ * /rbac/remove-queues-from-user:
+ *   post:
+ *     summary: Remove direct queue assignments from a user
+ *     tags: [RBAC]
  */
 router.post("/remove-queues-from-user",
     // authenticateJwt,
@@ -206,6 +305,12 @@ router.post("/remove-queues-from-user",
  * POST /api/v1/rbac/get-user-groups
  * Body: { userId: number }
  * Fetch all groups assigned to a specific user (superuser).
+ *
+ * @swagger
+ * /rbac/get-user-groups:
+ *   post:
+ *     summary: Get all groups assigned to a user
+ *     tags: [RBAC]
  */
 router.post("/get-user-groups",
     // authenticateJwt,
